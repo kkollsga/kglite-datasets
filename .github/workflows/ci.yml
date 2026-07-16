@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust-checks:
+    name: Rust checks (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      # The kglite-datasets-py crate is a PyO3 extension (abi3, extension-module
+      # off by default), so a plain `cargo build`/`clippy` of the workspace
+      # links libpython — provide it.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache cargo registry & target
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-checks-${{ matrix.os }}
+          workspaces: ". -> target"
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Run clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Run Rust tests
+        # Includes tests/csv_golden.rs — the sodir Rust output-boundary golden.
+        run: cargo test --workspace
+
+  python:
+    name: Python (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Cache cargo registry & target
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: python-${{ matrix.os }}
+          workspaces: ". -> target"
+
+      - name: Create venv and install build + runtime deps
+        # `kglite` is the runtime engine dependency (graph build); pulled from
+        # PyPI. maturin builds our native extension into the venv.
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install maturin pytest "kglite>=0.13"
+
+      - name: Build the extension into the venv (maturin develop)
+        run: .venv/bin/maturin develop
+
+      - name: Run the offline Python suite
+        # Live-API suites (SEC/Sodir/Wikidata) self-skip without their
+        # KGLITE_*_INTEGRATION env vars — the default run is fully offline and
+        # includes the SEC extract golden (test_parity_golden.py).
+        run: .venv/bin/python -m pytest -v --tb=short

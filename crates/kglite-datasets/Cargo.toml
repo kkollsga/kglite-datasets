@@ -1,0 +1,59 @@
+[package]
+name = "kglite-datasets"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "kglite-datasets — standalone extraction of kglite's domain dataset loaders (SEC EDGAR / Sodir / Wikidata): fetch public registries and shape them into kglite knowledge graphs."
+homepage = "https://github.com/kkollsga/kglite-datasets"
+documentation = "https://kglite-datasets.readthedocs.io"
+readme = "../../README.md"
+# crates.io caps keywords at 5 (≤20 chars each).
+keywords = ["knowledge-graph", "datasets", "sec-edgar", "wikidata", "sodir"]
+categories = ["database", "science", "parser-implementations"]
+
+[lib]
+name = "kglite_datasets"
+doctest = false
+
+[features]
+# All three loaders on by default so the shipped wheel + `cargo test` cover
+# the full surface. A diagnostic build can drop any via
+# `--no-default-features --features <loader>`.
+default = ["sec", "sodir", "wikidata"]
+# SEC EDGAR — adds the zip (bulk submissions) + quick-xml (XBRL) parsers.
+sec = ["dep:zip", "dep:quick-xml"]
+# Norwegian Offshore Directorate — adds the geojson (ArcGIS geometry) dep.
+sodir = ["dep:geojson"]
+# Wikidata dump orchestration — no extra deps beyond the shared set.
+wikidata = []
+
+[dependencies]
+# Shared across the loaders + the DatasetClient (http.rs). Pins held in
+# lockstep with kglite's crates/kglite/Cargo.toml — see dev-docs plan
+# "Phase 9 — Lockstep dep audit"; drift silently breaks byte parity.
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+thiserror = "1"
+csv = "1.3"
+chrono = { version = "0.4.43", features = ["serde"] }
+regex = "1"
+rayon = "1.10"
+# ureq 2 default features give rustls TLS + auto gzip; `json` adds the
+# serde_json body helpers sodir's fetch_json uses.
+ureq = { version = "2", features = ["json"] }
+
+# --- loader-specific (feature-gated) ---
+zip = { version = "2", optional = true, default-features = false, features = ["deflate"] }
+quick-xml = { version = "0.41", optional = true }
+geojson = { version = "0.24", optional = true }
+
+[dev-dependencies]
+# Golden oracle: SHA-256 of the canonical rendering of the loaders' emitted
+# CSVs (the Rust crate's output boundary — graph-building is a Python-layer
+# op via kglite's `from_blueprint`, goldened separately in the Python suite).
+sha2 = "0.10"
+tempfile = "3"
+# `csv` is a normal dep, but integration tests under tests/ can only reach
+# dev-deps + the public API, so it's declared here too (already compiled).
+csv = "1.3"

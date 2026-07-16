@@ -1,0 +1,63 @@
+# Local dev working folder — see dev-docs/README.md for the canonical layout.
+# Durable: `plans/` (actionable plans/backlog), `designs/` (design-decision
+# reference), `bench/scripts/` + `bench/results/`, `todos.md`. Auto-purged by
+# the dev-docs-cleanup skill: `temp/` (>1d, offload large output here to dodge
+# the token gate), `bench/out/` (>14d, built graphs / raw dataset dumps),
+# `bin/` (>7d, soft-deleted). Local working state, never committed.
+/dev-docs/
+
+# Inbox of feedback/coordination notes (`unread/` = needs action, `read/` =
+# archive). Kept at the repo root; local working state, never committed —
+# see the "Inbox hygiene" section in CLAUDE.md and inbox/README.md.
+/inbox/
+
+# Claude Code local settings (skills / working config; local state, never
+# committed — mirrors kglite's .gitignore).
+/.claude/
+
+# Python virtualenvs / caches
+/.venv/
+/.venv*/
+/venv/
+__pycache__/
+*.pyc
+*.pyo
+/.pytest_cache/
+/.ruff_cache/
+/.mypy_cache/
+/.hypothesis/
+
+# Rust build artifacts
+/target/
+
+# Built distribution artifacts — wheels + sdists are produced fresh by the
+# release workflow (maturin-action → PyPI), never committed.
+/dist/
+/wheels/
+
+# Compiled extension modules (built by maturin develop)
+*.so
+*.pyd
+
+# Built / downloaded dataset artifacts — regenerable from the loaders, never
+# committed. Heavy raw fetches + built graphs are disposable (dev-docs/bench/out).
+*.kgl
+# …except small, byte-deterministic test fixtures built from a seeded input.
+!tests/fixtures/*.kgl
+/data/
+
+# Internal feature-goalpost / competitive-survey planning doc — local working
+# state, kept out of the public repo and the shipped wheel. Belongs in
+# dev-docs/ per house convention; excluded here so going-public doesn't leak
+# competitive positioning. Maintainer: move to dev-docs/plans/ if you want it
+# tracked privately.
+/
+# Coverage
+.coverage
+coverage.xml
+
+# Sphinx docs build output
+docs/_build/
+
+# macOS
+.DS_Store

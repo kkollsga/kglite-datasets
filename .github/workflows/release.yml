@@ -1,0 +1,151 @@
+name: Release
+
+# Publishes on a version tag push (e.g. `git tag v0.1.0 && git push --tags`).
+# Order: crates.io first (publish-crate), then the wheels + PyPI (which `needs`
+# the crate job). Both publish paths are idempotent-safe: the crate job skips if
+# the version is already on crates.io (HTTP-404 guard), and the PyPI publish uses
+# `skip-existing: true`, so a re-run after a partial failure is safe.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ---- crates.io first ----
+  publish-crate:
+    name: Publish kglite-datasets to crates.io
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Set up Python (libpython for the workspace's PyO3 crate)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Cache cargo registry & target
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: publish-crate
+          workspaces: ". -> target"
+
+      - name: Check whether this version is already on crates.io
+        id: check
+        run: |
+          # Version is single-sourced in [workspace.package] (root Cargo.toml).
+          VERSION=$(grep -m 1 '^version' Cargo.toml | cut -d '"' -f 2)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          # HTTP 404 is the only "publish" signal — 200 means already there,
+          # anything else (403 rate-limit, 5xx) means "can't tell → skip safely".
+          # A contact-email User-Agent is required by crates.io API policy.
+          UA="kglite-datasets-ci/0.1.0 (https://github.com/kkollsga/kglite-datasets)"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -A "$UA" "https://crates.io/api/v1/crates/kglite-datasets/$VERSION")
+          if [ "$STATUS" = "404" ]; then
+            echo "kglite-datasets $VERSION not on crates.io (HTTP 404) — will publish"
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "kglite-datasets $VERSION already on crates.io or unverifiable (HTTP $STATUS) — skipping"
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Only the engine-free `kglite-datasets` crate is published; the PyO3
+      # wrapper crate (kglite-datasets-py) carries `publish = false` and ships
+      # only inside the wheel. `--locked` honours Cargo.lock for reproducibility.
+      - name: Publish kglite-datasets
+        if: steps.check.outputs.should_publish == 'true'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish -p kglite-datasets --locked
+
+  # ---- then the wheels ----
+  build-wheels:
+    name: Build wheel - ${{ matrix.os }} - ${{ matrix.target }}
+    needs: [publish-crate]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux (manylinux/musllinux containers via maturin-action).
+          - os: ubuntu-latest
+            target: x86_64
+            manylinux: '2014'
+          - os: ubuntu-latest
+            target: aarch64
+            manylinux: '2_28'
+          # macOS — native arm64 + cross x86_64 (Apple ships both SDKs).
+          - os: macos-latest
+            target: aarch64
+          - os: macos-latest
+            target: x86_64
+          # Windows.
+          - os: windows-latest
+            target: x64
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build abi3 wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          manylinux: ${{ matrix.manylinux }}
+          args: --release --out dist
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}-${{ matrix.target }}
+          path: dist/*.whl
+
+  build-sdist:
+    name: Build sdist
+    needs: [publish-crate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist
+      - name: Upload sdist
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: [build-wheels, build-sdist]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Trusted Publishing (OIDC): no API token — the maintainer registers this
+    # repo + workflow as a PyPI publisher, and id-token:write mints the
+    # short-lived credential at publish time.
+    permissions:
+      id-token: write
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          path: dist
+          merge-multiple: true
+      - name: Download sdist
+        uses: actions/download-artifact@v4
+        with:
+          name: sdist
+          path: dist
+      - name: List artifacts
+        run: ls -la dist
+      - name: Publish to PyPI (trusted publishing)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # Idempotent re-runs: a file already on PyPI is skipped, not an error.
+          skip-existing: true

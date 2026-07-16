@@ -1,0 +1,31 @@
+[workspace]
+members = [
+    "crates/kglite-datasets",
+    "crates/kglite-datasets-py",
+]
+resolver = "2"
+
+# Single source of truth for the crate version — every member sets
+# `version.workspace = true`, so a release bumps this one line. All
+# published crates ship in lockstep at the same version.
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/kkollsga/kglite-datasets"
+
+# Mirror kglite's release codegen so the standalone loaders keep
+# performance parity with kglite's own build (see kglite workspace
+# Cargo.toml). The loaders are engine-free (fetch → parse → emit CSV /
+# blueprint JSON / dump); the CSV→graph / ntriples→graph build is the
+# caller's job via kglite's `from_blueprint` / `load_ntriples`, so no
+# workspace member links the kglite crate.
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+
+[profile.profiling]
+inherits = "release"
+debug = "line-tables-only"
+strip = "none"

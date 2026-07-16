@@ -1,0 +1,10 @@
+{
+  "source": "in-tree-final",
+  "date": "2026-07-16",
+  "machine": "Apple M4",
+  "fixture": "synthetic 2-CIK (50 iters)",
+  "median_ms": 3.369,
+  "min_ms": 3.252,
+  "tolerance": 1.5,
+  "note": "Frozen SEC-extract throughput of kglite's in-tree loader, captured 2026-07-16 while our extracted loader was proven byte-identical to it. kglite's in-tree loader has since been removed, so this JSON is the durable perf anchor: the bench fails if our builder's median regresses beyond tolerance x this median. Absolute ms are machine-specific (Apple M4); the load-bearing invariant is the ratio."
+}

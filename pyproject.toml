@@ -1,0 +1,55 @@
+[build-system]
+requires = ["maturin>=1.4,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "kglite-datasets"
+description = "Fetch-build-cache dataset loaders for kglite — SEC EDGAR, Sodir (Norwegian Offshore Directorate), and Wikidata as queryable knowledge graphs."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    {name = "Kristian dF Kollsgård", email = "kkollsg@gmail.com"}
+]
+keywords = ["knowledge-graph", "datasets", "sec-edgar", "wikidata", "sodir", "kglite", "cypher"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "Topic :: Database",
+    "Topic :: Scientific/Engineering",
+]
+dynamic = ["version"]
+
+# The single wheel bundles the Rust loaders (this crate) but reuses the
+# kglite engine for the graph-build step — the wrappers call
+# `from kglite import KnowledgeGraph`. So the wheel depends on kglite at
+# runtime; "everything" means all dataset functionality, engine reused not
+# forked.
+dependencies = [
+    "kglite>=0.13",
+]
+
+[project.optional-dependencies]
+# Columnar export helpers. Kept SOFT (never a hard dep) — the 2026-07
+# mimalloc TCB slot-clash entered kglite workflows through SEC + pyarrow;
+# isolation from that blast radius is part of why this crate exists.
+arrow = ["pyarrow"]
+
+[tool.pytest.ini_options]
+# The loader test suites live inside the package (mixed layout). Live-API
+# suites (SEC/Sodir/Wikidata) self-skip unless their integration env var is
+# set — e.g. KGLITE_SEC_INTEGRATION=1 — so the default run is fully offline.
+testpaths = ["kglite_datasets"]
+
+[tool.maturin]
+manifest-path = "crates/kglite-datasets-py/Cargo.toml"
+# Rename the wheel's extension so the package's `from .kglite_datasets import *`
+# finds it (maturin's default would use the crate's `[lib] name`).
+module-name = "kglite_datasets.kglite_datasets"
+# extension-module is added here (not as a Cargo default) so plain
+# `cargo build` / `cargo test` still link. Mirrors kglite.
+features = ["python-extension"]
+python-source = "."

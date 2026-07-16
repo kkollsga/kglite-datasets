@@ -1,0 +1,4 @@
+NPDID_strat_chrono,strat_chrono_name,strat_chrono_parent_name
+100,Cenozoic,
+200,Paleogene,Cenozoic
+300,Eocene,Paleogene
