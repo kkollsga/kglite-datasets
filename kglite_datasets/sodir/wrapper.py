@@ -23,12 +23,13 @@ import json
 from pathlib import Path
 from typing import Any
 
-from kglite import KnowledgeGraph, from_blueprint, load
+from kglite import KnowledgeGraph, from_blueprint
 
 # Rust binding submodule produced by maturin from `src/sodir.rs`. The
 # kglite_datasets.sodir subpackage is excluded from mypy stubtest
 # (mypy_stubtest.ini) so the bare import works without a stub.
 from kglite_datasets import _sodir_internal
+from kglite_datasets._cache import load_cached_graph
 
 INDEX_FILE = "sodir_index.json"
 GRAPH_SUBDIR = "graph"
@@ -90,7 +91,12 @@ def open(  # noqa: A001
         if age is not None and age < dataset_cooldown_days:
             if verbose:
                 print(f"  Sodir graph at {graph_dir} is {age:.1f}d old (< {dataset_cooldown_days}d cooldown). Loading.")
-            return load(str(graph_dir))
+            # A cache that will not re-open is a miss, not an error: fall
+            # through and rebuild from the CSVs rather than stranding the
+            # caller on a workdir they must delete by hand.
+            cached = load_cached_graph(graph_dir, label="Sodir")
+            if cached is not None:
+                return cached
     elif storage == "disk" and force_rebuild and verbose:
         print("  force_rebuild=True — skipping cache, rebuilding graph from CSVs.")
 

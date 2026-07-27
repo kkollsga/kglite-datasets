@@ -35,6 +35,11 @@
 // Shared synchronous HTTP client (ureq + rate gate + retry).
 pub mod http;
 
+// Shared knowledge of kglite's committed-disk-graph markers, used by every
+// loader that caches a disk graph. Engine-format knowledge, not engine code —
+// this crate still links nothing of kglite.
+pub mod disk_graph;
+
 // Per-loader modules, feature-gated (mirrors kglite's datasets/mod.rs):
 #[cfg(feature = "sec")]
 pub mod sec;

@@ -32,12 +32,13 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 
-from kglite import KnowledgeGraph, load
+from kglite import KnowledgeGraph
 
 # Rust binding submodule produced by maturin from `src/wikidata.rs`.
 # kglite_datasets.wikidata is excluded from mypy stubtest
 # (mypy_stubtest.ini) so the bare import works without a stub.
 from kglite_datasets import _wikidata_internal
+from kglite_datasets._cache import load_cached_graph
 
 SOURCE_META_FILENAME = "wikidata_source.json"
 GRAPH_SUBDIR = "graph"
@@ -93,10 +94,7 @@ def open(  # noqa: A001  (intentional `open` shadow, module-scoped)
         return _build_memory_graph(dump_path, languages, entity_limit_millions, verbose, progress)
 
     graph_dir = workdir / _graph_subdir(entity_limit_millions)
-    # Generation-format graphs publish CURRENT atomically; legacy graphs use
-    # the root disk_graph_meta.json directly.
-    current = graph_dir / "CURRENT"
-    graph_meta = current if current.exists() else graph_dir / "disk_graph_meta.json"
+    graph_meta = _commit_marker(graph_dir)
     source_meta = graph_dir / SOURCE_META_FILENAME
     cache_key = (str(graph_dir.resolve()), entity_limit_millions)
 
@@ -128,13 +126,21 @@ def open(  # noqa: A001  (intentional `open` shadow, module-scoped)
     elif action == "load":
         if verbose:
             print(f"  Wikidata graph at {graph_dir}: {reason}. Loading.")
-        return _load_cached(graph_dir, graph_meta, cache_key)
+        # A cache that will not re-open is a miss, not an error — fall through
+        # to the rebuild rather than stranding the caller on a graph dir they
+        # have to delete by hand.
+        cached = _load_cached(graph_dir, graph_meta, cache_key)
+        if cached is not None:
+            return cached
     elif action == "rebuild" and verbose:
         print(f"  Rebuilding Wikidata graph at {graph_dir}: {reason}.")
     # `action == "build"` (no cache) falls through to the build path below.
 
     dump_path, dump_mtime = _ensure_dump(workdir, cooldown_days, verbose)
     g = _build_graph(workdir, dump_path, dump_mtime, languages, entity_limit_millions, verbose, progress)
+    # Re-resolve the marker: the build publishes CURRENT, which may not have
+    # been the marker the pre-build probe picked.
+    graph_meta = _commit_marker(graph_dir)
     if graph_meta.exists():
         _PROCESS_CACHE[cache_key] = (g, graph_meta.stat().st_mtime)
     return g
@@ -173,12 +179,27 @@ def _ensure_dump(workdir: Path, cooldown_days: int, verbose: bool) -> tuple[Path
     return Path(path_str), mtime
 
 
+def _commit_marker(graph_dir: Path) -> Path:
+    """The file marking ``graph_dir`` as a committed kglite disk graph.
+
+    Generation-format graphs publish ``CURRENT`` atomically; older graphs use
+    the root ``disk_graph_meta.json`` directly. Mirrors the Rust
+    ``disk_graph::commit_marker`` the sec/sodir loaders probe through.
+    """
+    current = graph_dir / "CURRENT"
+    return current if current.is_file() else graph_dir / "disk_graph_meta.json"
+
+
 def _load_cached(
     graph_dir: Path,
     graph_meta: Path,
     cache_key: tuple[str, int | None],
-) -> KnowledgeGraph:
-    g = load(str(graph_dir))
+) -> KnowledgeGraph | None:
+    """Re-open the cached graph, or ``None`` to rebuild."""
+    g = load_cached_graph(graph_dir, label="Wikidata")
+    if g is None:
+        _PROCESS_CACHE.pop(cache_key, None)
+        return None
     _PROCESS_CACHE[cache_key] = (g, graph_meta.stat().st_mtime)
     return g
 

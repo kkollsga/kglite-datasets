@@ -21,6 +21,30 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 
 ### Fixed
 
+- **SEC `mode="disk"` never cached, for two independent reasons — both fixed.**
+  The Rust `graph_exists(Disk)` probe looked for `graph_manifest.json`, which
+  kglite has never written, so the cache-hit branch was unreachable; and
+  `_build_graph(mode="disk")` passed `save=True` to `from_blueprint`, which
+  only honours the blueprint's `output` key (ours has none), so nothing was
+  ever committed to the graph directory in the first place. Every disk-mode
+  open therefore rebuilt from scratch, silently.
+
+  The probe now looks for kglite's real commit markers — `CURRENT` (generation
+  layout) or `disk_graph_meta.json` (flat) — via a new shared crate module
+  `disk_graph`, which also absorbs the copy of that logic that already existed
+  in the sodir layout. The disk build now calls `save()` explicitly, matching
+  the sodir and wikidata wrappers.
+
+- **A cached graph that will not re-open is now a cache miss, not an error.**
+  All three loaders route their reopen through `kglite_datasets._cache`, which
+  returns `None` (with a `StaleGraphCacheWarning`) instead of propagating, so
+  the caller rebuilds. This matters here specifically: the broken probe above
+  was *masking* the zero-row disk defect below, and repairing the probe alone
+  would have turned a silent rebuild into a hard user-facing failure. With the
+  fallback, the wrapper is correct either way — while the engine defect stands,
+  disk callers rebuild exactly as before; once it is fixed the cache begins
+  hitting with no further change. `test_graph_cache.py` asserts both arms.
+
 - **Text file I/O now specifies `encoding="utf-8"` explicitly** across the
   three wrappers (found by the newly-live ruff gate, rule `PLW1514`). Without
   it Python uses the platform's locale encoding, so on a Windows host reading
@@ -69,12 +93,12 @@ semantic versioning (workspace version in the root `Cargo.toml`).
   It reaches us through SEC `mode="disk"`: the blueprint declares 26 node
   types, and any info-row type with no rows for the requested slice trips it —
   in the synthetic fixture only `Company`, `Filing` and `SicCode` have rows, and
-  each of the other 23 fails on its own. Currently masked rather than fatal:
-  the Rust `graph_exists(Disk)` probe looks for `graph_manifest.json`, a
-  filename kglite never writes, so the cache-hit branch is never taken and
-  disk-mode callers silently rebuild every time instead of hitting the error.
-  Both halves should be fixed together — repairing `graph_exists` alone would
-  convert a silent cache miss into a hard failure.
+  each of the other 23 fails on its own. It was previously masked by the broken
+  `graph_exists(Disk)` probe (see Fixed). Now that the probe is correct, the
+  cache-reopen fallback is what keeps it non-fatal: the unreadable directory is
+  treated as a cache miss and the graph is rebuilt. Users on `mode="disk"`
+  therefore pay a full rebuild on every open until the engine fix ships — the
+  same cost as before, but now deliberate and warned about rather than silent.
 
 ## [0.1.0] - 2026-07-16
 

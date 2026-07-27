@@ -146,18 +146,25 @@ impl Workdir {
         self.graph_dir(mode).join("sec.kgl")
     }
 
-    pub fn graph_manifest(&self, mode: StorageMode) -> PathBuf {
-        self.graph_dir(mode).join("graph_manifest.json")
+    /// The file marking `graph/disk/` as a committed kglite disk graph —
+    /// `CURRENT` (generation layout) or `disk_graph_meta.json` (flat). See
+    /// [`crate::disk_graph`]; the mtime also dates the cache.
+    pub fn disk_graph_marker(&self) -> PathBuf {
+        crate::disk_graph::commit_marker(&self.graph_dir(StorageMode::Disk))
     }
 
     /// True if a graph for the given mode already exists. Caller uses
     /// this for the "reopen → load, don't rebuild" contract.
+    ///
+    /// A `true` here is only a *probe*: it says a publish completed, not that
+    /// the bytes load. Callers must fall back to rebuilding when the load
+    /// afterwards fails (see `sec/wrapper.py::_load_cached_graph`).
     pub fn graph_exists(&self, mode: StorageMode) -> bool {
         match mode {
             // Memory/Mapped: a single .kgl file.
             StorageMode::Memory | StorageMode::Mapped => self.graph_kgl(mode).is_file(),
-            // Disk: a directory of mmap files with a manifest.
-            StorageMode::Disk => self.graph_manifest(mode).is_file(),
+            // Disk: a directory of mmap files with a root commit marker.
+            StorageMode::Disk => crate::disk_graph::exists(&self.graph_dir(mode)),
         }
     }
 
@@ -235,6 +242,38 @@ mod tests {
         assert!(!w.graph_exists(StorageMode::Memory));
         assert!(!w.graph_exists(StorageMode::Mapped));
         assert!(!w.graph_exists(StorageMode::Disk));
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    /// Regression: the disk probe looked for `graph_manifest.json`, a name
+    /// kglite has never written, so `mode="disk"` never hit its cache and
+    /// silently rebuilt on every open. Both real markers must be recognised
+    /// and the phantom one must not be.
+    #[test]
+    fn disk_graph_exists_tracks_kglite_commit_markers() {
+        let tmp = tempdir();
+        let w = Workdir::new(&tmp);
+        let dir = w.graph_dir(StorageMode::Disk);
+        std::fs::create_dir_all(&dir).unwrap();
+        assert!(
+            !w.graph_exists(StorageMode::Disk),
+            "bare dir is not a graph"
+        );
+
+        std::fs::write(dir.join("graph_manifest.json"), b"{}").unwrap();
+        assert!(
+            !w.graph_exists(StorageMode::Disk),
+            "graph_manifest.json is not a kglite artifact"
+        );
+
+        std::fs::write(dir.join("disk_graph_meta.json"), b"{}").unwrap();
+        assert!(w.graph_exists(StorageMode::Disk), "flat layout");
+        assert_eq!(w.disk_graph_marker(), dir.join("disk_graph_meta.json"));
+
+        std::fs::write(dir.join("CURRENT"), b"gen_00000000000000000001\n").unwrap();
+        assert!(w.graph_exists(StorageMode::Disk), "generation layout");
+        assert_eq!(w.disk_graph_marker(), dir.join("CURRENT"));
+
         std::fs::remove_dir_all(&tmp).ok();
     }
 

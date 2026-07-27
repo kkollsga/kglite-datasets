@@ -16,12 +16,13 @@ import json
 from pathlib import Path
 from typing import Any, Optional, Union
 
-from kglite import KnowledgeGraph, from_blueprint, load
+from kglite import KnowledgeGraph, from_blueprint
 
 # Rust binding submodule produced by maturin from `src/sec.rs`. The
 # kglite_datasets.sec subpackage is excluded from mypy stubtest
 # (mypy_stubtest.ini) so the bare import works without a stub.
 from kglite_datasets import _sec_internal
+from kglite_datasets._cache import load_cached_graph
 
 PACKAGED_BLUEPRINT = Path(__file__).with_name("blueprint.json")
 DEFAULT_USER_AGENT = None  # required; no sensible default
@@ -507,11 +508,13 @@ class SEC:
         if mode not in _STORAGE_MODES:
             raise ValueError(f"mode must be one of {_STORAGE_MODES!r}; got {mode!r}")
 
-        # Step 0: if graph exists for this mode, just load it.
-        if not force_rebuild and _sec_internal.graph_exists(str(workdir), mode):
-            if verbose and not quiet:
-                print(f"[SEC] loading cached graph: {workdir}/graph/{mode}/")
-            return _load_graph(workdir, mode)
+        # Step 0: if a usable graph exists for this mode, just load it. A
+        # cached graph that will not re-open is treated as a miss and falls
+        # through to the rebuild below — see `_load_cached_graph`.
+        if not force_rebuild:
+            cached = _load_cached_graph(workdir, mode, verbose=verbose and not quiet)
+            if cached is not None:
+                return cached
 
         years_int = years_int_predict
 
@@ -672,14 +675,39 @@ class SEC:
         )
 
 
-def _load_graph(workdir: Path, mode: str) -> KnowledgeGraph:
+def _graph_target(workdir: Path, mode: str) -> Path:
+    """What ``kglite.load`` is handed for ``mode`` — a ``.kgl`` file for
+    memory/mapped, the graph directory for disk."""
     graph_dir = Path(_sec_internal.graph_dir(str(workdir), mode))
     if mode in ("memory", "mapped"):
-        return load(str(graph_dir / "sec.kgl"))
+        return graph_dir / "sec.kgl"
     if mode == "disk":
-        # Disk-mode graphs are loaded by passing the directory.
-        return load(str(graph_dir))
+        return graph_dir
     raise ValueError(f"unknown mode: {mode!r}")
+
+
+def _load_cached_graph(workdir: Path, mode: str, *, verbose: bool = False) -> Optional[KnowledgeGraph]:
+    """Return the cached graph for ``mode``, or ``None`` to rebuild.
+
+    Two ways to get ``None``, and they are deliberately indistinguishable to
+    the caller: no cache was ever written, or one was written and no longer
+    loads. Both mean "build it".
+
+    The second case matters because the disk-mode probe used to look for
+    ``graph_manifest.json`` — a filename kglite never writes — so every
+    ``mode="disk"`` open missed its cache and rebuilt. Fixing the probe on its
+    own would have turned that silent rebuild into a hard user-facing failure
+    for anyone whose graph directory kglite cannot currently reopen (see the
+    zero-row engine defect in CHANGELOG "Known issues"). Probe + fallback ship
+    together so the wrapper is correct either way: while the defect stands,
+    disk callers keep rebuilding exactly as they did before; once it is fixed,
+    the cache starts hitting with no further change here.
+    """
+    if not _sec_internal.graph_exists(str(workdir), mode):
+        return None
+    if verbose:
+        print(f"[SEC] loading cached graph: {workdir}/graph/{mode}/")
+    return load_cached_graph(_graph_target(workdir, mode), label="SEC", verbose=False)
 
 
 def _build_graph(workdir: Path, mode: str, verbose: bool) -> KnowledgeGraph:
@@ -708,10 +736,17 @@ def _build_graph(workdir: Path, mode: str, verbose: bool) -> KnowledgeGraph:
             g = from_blueprint(
                 str(compiled),
                 verbose=False,
-                save=True,
+                save=False,
                 storage="disk",
                 path=str(graph_dir),
             )
+            # `save()` is what publishes the root CURRENT pointer, and it is
+            # what makes `kglite.load(graph_dir)` work on the next open. This
+            # used to pass `save=True` to `from_blueprint` instead, which only
+            # writes to the path named by the blueprint's `output` key — our
+            # blueprint has none, so the call was a no-op and the disk graph
+            # was never committed. Matches the sodir and wikidata wrappers.
+            g.save(str(graph_dir))
             return g
         raise ValueError(f"unknown mode: {mode!r}")
     finally:
