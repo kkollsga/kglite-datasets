@@ -28,6 +28,26 @@ dynamic = ["version"]
 # `from kglite import KnowledgeGraph`. So the wheel depends on kglite at
 # runtime; "everything" means all dataset functionality, engine reused not
 # forked.
+#
+# The floor stays at 0.13 deliberately — reviewed against kglite 0.15.0 on
+# 2026-07-27 and left permissive on evidence, not by omission:
+#
+#  * The engine surface we use is small and old: KnowledgeGraph, load,
+#    from_blueprint, load_ntriples, save. All present and behaviourally
+#    identical at 0.13.0.
+#  * `tests/goldens/sec-graph-build.sha256` — the built-graph topology digest —
+#    is *identical* under 0.13.0, 0.14.5 and 0.15.0. The graph a user receives
+#    does not depend on which supported engine they resolved.
+#  * We use none of the 0.15-only surface: no `kglite.open()`, no `durable=`,
+#    no `sync()`, no constraints, no `lock_schema=True`, and no Cypher at all
+#    in the wrappers. So 0.15's typed ConstraintViolationError, its locked-
+#    schema unknown-label rejection, and its REMOVE/SET fix cannot reach us.
+#  * 0.15's bulk-`add_nodes` WAL speedups likewise don't apply: the build goes
+#    through `from_blueprint`, and this crate's own loaders are engine-free.
+#
+# This is a library, so the floor is a constraint we impose on downstreams that
+# also pin kglite. Raise it only when we actually consume something newer —
+# not to advertise a version we merely tested against.
 dependencies = [
     "kglite>=0.13",
 ]

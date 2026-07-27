@@ -7,91 +7,18 @@ shape. Does NOT hit the live SEC.
 
 from __future__ import annotations
 
-import io
-import json
 from pathlib import Path
-import zipfile
 
 import pytest
 
 from kglite_datasets import _sec_internal
+from kglite_datasets.tests.synth_sec import write_synth_raw
 
 
 @pytest.fixture
 def synth_workdir(tmp_path: Path) -> Path:
-    """Workdir with synthetic raw/ tier — no network, no SEC."""
-    raw_dir = tmp_path / "raw"
-    (raw_dir / "submissions").mkdir(parents=True, exist_ok=True)
-    (raw_dir / "index").mkdir(parents=True, exist_ok=True)
-
-    # Synthetic submissions.zip with 2 CIK JSONs.
-    apple_json = {
-        "cik": 320193,
-        "name": "Apple Inc.",
-        "sic": "3571",
-        "sicDescription": "Electronic Computers",
-        "stateOfIncorporation": "CA",
-        "fiscalYearEnd": "0930",
-        "tickers": ["AAPL"],
-        "exchanges": ["Nasdaq"],
-        "entityType": "operating",
-        "formerNames": [
-            {
-                "name": "Apple Computer Inc",
-                "from": "1976-04-01",
-                "to": "2007-01-09",
-            }
-        ],
-        "filings": {
-            "recent": {
-                "accessionNumber": [
-                    "0000320193-24-000123",
-                    "0000320193-24-000089",
-                ],
-                "filingDate": ["2024-11-01", "2024-08-02"],
-                "reportDate": ["2024-09-28", "2024-06-29"],
-                "form": ["10-K", "10-Q"],
-                "primaryDocument": [
-                    "aapl-20240928.htm",
-                    "aapl-20240629.htm",
-                ],
-            },
-            "files": [],
-        },
-    }
-    msft_json = {
-        "cik": 789019,
-        "name": "Microsoft Corp",
-        "sic": "7372",
-        "stateOfIncorporation": "WA",
-        "tickers": ["MSFT"],
-        "exchanges": ["Nasdaq"],
-        "filings": {
-            "recent": {
-                "accessionNumber": ["0000789019-24-000045"],
-                "filingDate": ["2024-07-30"],
-                "reportDate": ["2024-06-30"],
-                "form": ["8-K"],
-                "primaryDocument": ["msft-20240730.htm"],
-            },
-            "files": [],
-        },
-    }
-    zip_path = raw_dir / "submissions" / "submissions.zip"
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as z:
-        z.writestr("CIK0000320193.json", json.dumps(apple_json))
-        z.writestr("CIK0000789019.json", json.dumps(msft_json))
-    zip_path.write_bytes(buf.getvalue())
-
-    # Master.idx with one historical filing not in submissions
-    (raw_dir / "index" / "master.2020_QTR4.idx").write_text(
-        "Description: Master Index\n"
-        "----\n"
-        "1000045|NICHOLAS FINANCIAL INC|10-Q|2020-12-15|"
-        "edgar/data/1000045/0001654954-20-001234-index.htm\n"
-    )
-    return tmp_path
+    """Workdir with the shared synthetic raw/ tier — no network, no SEC."""
+    return write_synth_raw(tmp_path)
 
 
 def test_extract_then_build_end_to_end(synth_workdir: Path) -> None:

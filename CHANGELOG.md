@@ -6,6 +6,42 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 
 ## [Unreleased]
 
+### Added
+
+- **GATE #3 — built-graph golden** (`kglite_datasets/tests/test_graph_build_golden.py`,
+  `tests/goldens/sec-graph-build.sha256`). GATE #1 freezes the CSVs we emit;
+  everything after that boundary (blueprint → `from_blueprint` → `.kgl` →
+  `load`) is kglite's, and the offline suite previously asserted nothing about
+  it — an engine upgrade could change node/edge counts or break the
+  save→reload round trip with the suite still fully green. The new gate freezes
+  the topology of the graph a user actually receives and exercises the SEC
+  wrapper's create-then-reopen cache contract.
+
+### Changed
+
+- Verified against **kglite 0.15.0**. The built-graph digest is identical under
+  kglite 0.13.0, 0.14.5 and 0.15.0, so the `kglite>=0.13` floor stays as-is;
+  `pyproject.toml` now records why, so the pin reads as a decision rather than
+  an oversight.
+- The synthetic SEC `raw/` fixture is now defined once in
+  `kglite_datasets/tests/synth_sec.py` instead of being copy-pasted into each
+  test module. Content is unchanged — the frozen extract golden is untouched.
+  `benchmarks/bench_sec_extract.py` deliberately keeps its own inline copy: its
+  fixture is part of the frozen measurement conditions in `baseline.json`.
+
+### Known issues
+
+- **SEC `mode="disk"` produces a graph directory that cannot be reopened.**
+  `from_blueprint(..., storage="disk", path=...)` writes only `seg_000` (plus
+  `CURRENT`/`generations` if `save()` is called), and `kglite.load(dir)` then
+  fails with `FileFormatError: invalid id_indices.bin: directory contains an
+  unresolved type key`. Reproduces identically on kglite 0.13.0, 0.14.5 and
+  0.15.0, so it is **not** a 0.15 regression. Currently masked: the Rust
+  `graph_exists(Disk)` probe looks for `graph_manifest.json`, a filename kglite
+  never writes, so the cache-hit branch is never taken and disk-mode callers
+  silently rebuild every time instead of erroring. Engine-side; not worked
+  around here.
+
 ## [0.1.0] - 2026-07-16
 
 Initial public release. `kglite-datasets` is the standalone extraction of
