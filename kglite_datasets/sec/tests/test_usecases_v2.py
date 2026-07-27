@@ -17,9 +17,9 @@ import time
 from typing import Any, cast
 import zipfile
 
+from kglite import from_blueprint  # engine — graph build stays in kglite
 import pytest
 
-from kglite import from_blueprint  # engine — graph build stays in kglite
 from kglite_datasets import _sec_internal
 from kglite_datasets.sec.wrapper import _blueprint_with_root, _load_blueprint
 

@@ -16,20 +16,30 @@ crates.io + PyPI.
 ## Build & test
 
 ```bash
-source .venv/bin/activate && unset CONDA_PREFIX
+make venv                    # provision .venv with the dev toolchain (maturin/pytest/ruff/kglite)
 make develop                 # maturin develop into .venv (add --release by hand for perf)
-make lint                    # cargo fmt --check + clippy -D warnings (+ ruff if installed)
+make lint                    # cargo fmt --check + clippy -D warnings + ruff check/format --check
 make test                    # cargo test --workspace (Rust: unit + csv_golden oracle)
 make pytest                  # Python offline suite (needs `make develop`)
 make bench                   # SEC-extract perf gate vs frozen baseline (needs venv)
 make gate                    # the full CI-equivalent gate: lint → build → test → …
 ```
 
+Targets resolve `.venv/bin/…` themselves — no activation needed.
+
 `make gate` is the single entry point mirroring kglite's gate discipline
 (`make gate` runs `lint`, workspace build, workspace test, plus the honest
-determinism/bench-smoke describe steps). The Rust gate is portable (no venv);
-the Python `pytest` + `bench` gates need `make develop` + a kglite wheel in
-`.venv`. Keep this list in sync with the `Makefile`.
+determinism/bench-smoke describe steps). `make pytest` + `make bench` need
+`make develop` + a kglite wheel in `.venv`. Keep this list in sync with the
+`Makefile`.
+
+**A gate may never silently no-op.** If a target's tool is missing it must
+fail with the fix printed, never skip with a notice — and the tool must be in
+`DEV_DEPS` (`make venv`) so it is actually present. `ruff` was in the Makefile
+from day one behind a `command -v ruff || skip` guard and was never installed
+by anyone, so the Python lint gate ran zero times and accumulated 42 findings
+while reporting success. Same rule for tests: see **Datasets discipline** on
+skip accounting.
 
 ## Working style
 

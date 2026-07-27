@@ -8,6 +8,27 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 
 ### Added
 
+- **GATE #4 — the Python lint gate now actually runs.** `ruff` was wired into
+  `make lint` from day one behind a `command -v ruff || skip` guard, was never
+  installed by anyone, and was never in CI — so it had executed exactly zero
+  times while reporting success, and had quietly accumulated 42 findings and 11
+  unformatted files. Three changes make it real: a committed `[tool.ruff]`
+  config in `pyproject.toml` (deliberately mirroring `../kglite`'s, so the
+  ecosystem shares one Python style); `make ruff-check` now hard-fails when
+  ruff is missing instead of skipping, and a new `make venv` target provisions
+  it so it cannot be missing; and a new `python-lint` CI job runs
+  `ruff check` + `ruff format --check` on every push.
+
+### Fixed
+
+- **Text file I/O now specifies `encoding="utf-8"` explicitly** across the
+  three wrappers (found by the newly-live ruff gate, rule `PLW1514`). Without
+  it Python uses the platform's locale encoding, so on a Windows host reading
+  SEC's `company_tickers.json` or Sodir's Norwegian dataset text would decode
+  under cp1252 and either corrupt names or raise `UnicodeDecodeError`. Only one
+  site was flagged by the rule (it only fires where the receiver is statically
+  a `Path`); the rest were fixed as the same class of bug.
+
 - **GATE #3 — built-graph golden** (`kglite_datasets/tests/test_graph_build_golden.py`,
   `tests/goldens/sec-graph-build.sha256`). GATE #1 freezes the CSVs we emit;
   everything after that boundary (blueprint → `from_blueprint` → `.kgl` →

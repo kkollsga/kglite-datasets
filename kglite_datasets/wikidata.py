@@ -32,12 +32,12 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 
+from kglite import KnowledgeGraph, load
+
 # Rust binding submodule produced by maturin from `src/wikidata.rs`.
 # kglite_datasets.wikidata is excluded from mypy stubtest
 # (mypy_stubtest.ini) so the bare import works without a stub.
 from kglite_datasets import _wikidata_internal
-
-from kglite import KnowledgeGraph, load
 
 SOURCE_META_FILENAME = "wikidata_source.json"
 GRAPH_SUBDIR = "graph"
@@ -262,7 +262,7 @@ def _write_source_meta(
         "entity_limit_millions": entity_limit_millions,
         "built_at_iso": datetime.now(timezone.utc).isoformat(),
     }
-    path.write_text(json.dumps(payload, indent=2))
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
 def _file_mtime_utc(path: Path) -> datetime | None:

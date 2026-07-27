@@ -58,6 +58,39 @@ dependencies = [
 # isolation from that blast radius is part of why this crate exists.
 arrow = ["pyarrow"]
 
+[tool.ruff]
+# Deliberately mirrors ../kglite's `[tool.ruff]` — one Python style across the
+# ecosystem, so a contributor moving between the two repos never re-learns the
+# formatter. Divergences from kglite are only the two path settings below
+# (`src` / `known-first-party`), which name this package instead of `kglite`.
+line-length = 120
+target-version = "py310"
+src = ["kglite_datasets"]
+# ruff 0.16 began formatting Python code blocks embedded in Markdown; our prose
+# examples are hand-wrapped for narrow doc columns. Same scope decision as
+# kglite — keep the formatter on real Python only.
+extend-exclude = ["*.md"]
+
+[tool.ruff.lint]
+# PLW1514 (`open`/`read_text`/`write_text` without an explicit encoding) is
+# still a preview rule, so preview is enabled with `explicit-preview-rules`:
+# only preview rules named by their exact code are active, and the E/F/I/W
+# sets keep their stable behaviour.
+preview = true
+explicit-preview-rules = true
+select = ["E", "F", "I", "W", "PLW1514"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["kglite_datasets"]
+force-sort-within-sections = true
+
+[tool.ruff.lint.per-file-ignores]
+# Tests live inside the package (mixed layout), so the path pattern differs
+# from kglite's `tests/*` — the intent (E402: imports after a skip guard or an
+# env-var preamble are deliberate) is the same.
+"kglite_datasets/**/tests/*" = ["E402"]
+"benchmarks/*" = ["E402"]
+
 [tool.pytest.ini_options]
 # The loader test suites live inside the package (mixed layout). Live-API
 # suites (SEC/Sodir/Wikidata) self-skip unless their integration env var is

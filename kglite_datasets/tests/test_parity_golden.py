@@ -46,8 +46,7 @@ def _canonical_processed(workdir: Path) -> str:
         header = lines[0].split(",")
         keep = [i for i, col in enumerate(header) if col not in VOLATILE_COLUMNS]
         out.append("H\t" + "\t".join(header[i] for i in keep))
-        rows = ["\t".join(row.split(",")[i] if i < len(row.split(",")) else "" for i in keep)
-                for row in lines[1:]]
+        rows = ["\t".join(row.split(",")[i] if i < len(row.split(",")) else "" for i in keep) for row in lines[1:]]
         out.extend(f"R\t{r}" for r in sorted(rows))
     return "\n".join(out) + "\n"
 

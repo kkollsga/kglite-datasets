@@ -50,6 +50,34 @@ jobs:
         # Includes tests/csv_golden.rs — the sodir Rust output-boundary golden.
         run: cargo test --workspace
 
+  python-lint:
+    # ruff was in the Makefile from day one but never in CI, and was never
+    # installed locally either — so the Python lint gate had never executed a
+    # single time (42 findings, 11 unformatted files, all green). One
+    # OS-independent job, pinned so a ruff release cannot turn an unrelated PR
+    # red; bump it deliberately.
+    name: Python lint (ruff)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install ruff
+        run: python -m pip install 'ruff==0.16.0'
+
+      # Config lives in pyproject.toml `[tool.ruff]`, mirroring ../kglite.
+      # Keep the path list in sync with the Makefile's PY_PATHS.
+      - name: ruff check
+        run: ruff check kglite_datasets benchmarks
+
+      - name: ruff format --check
+        run: ruff format --check kglite_datasets benchmarks
+
   python:
     name: Python (${{ matrix.os }}, kglite ${{ matrix.kglite-label }})
     runs-on: ${{ matrix.os }}

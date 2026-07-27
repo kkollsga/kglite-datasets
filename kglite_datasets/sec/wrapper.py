@@ -16,12 +16,12 @@ import json
 from pathlib import Path
 from typing import Any, Optional, Union
 
+from kglite import KnowledgeGraph, from_blueprint, load
+
 # Rust binding submodule produced by maturin from `src/sec.rs`. The
 # kglite_datasets.sec subpackage is excluded from mypy stubtest
 # (mypy_stubtest.ini) so the bare import works without a stub.
 from kglite_datasets import _sec_internal
-
-from kglite import KnowledgeGraph, from_blueprint, load
 
 PACKAGED_BLUEPRINT = Path(__file__).with_name("blueprint.json")
 DEFAULT_USER_AGENT = None  # required; no sensible default
@@ -369,7 +369,7 @@ def _resolve_companies(
 
     # Parse via the core helper (single source of truth — every binding
     # gets the same `TICKER → CIK` map shape). Lifted in 0.10.2 prep.
-    ticker_to_cik = _sec_internal.parse_tickers_json_py(tickers_path.read_text())
+    ticker_to_cik = _sec_internal.parse_tickers_json_py(tickers_path.read_text(encoding="utf-8"))
 
     resolved: list[int] = []
     unknown: list[str] = []
@@ -688,7 +688,7 @@ def _build_graph(workdir: Path, mode: str, verbose: bool) -> KnowledgeGraph:
 
     bp = _blueprint_with_root(_load_blueprint(), workdir)
     compiled = workdir / "_sec_compiled_blueprint.json"
-    compiled.write_text(json.dumps(bp))
+    compiled.write_text(json.dumps(bp), encoding="utf-8")
     try:
         if mode == "memory":
             g = from_blueprint(str(compiled), verbose=False, save=False)
@@ -719,7 +719,7 @@ def _build_graph(workdir: Path, mode: str, verbose: bool) -> KnowledgeGraph:
 
 
 def _load_blueprint() -> dict[str, Any]:
-    return json.loads(PACKAGED_BLUEPRINT.read_text())
+    return json.loads(PACKAGED_BLUEPRINT.read_text(encoding="utf-8"))
 
 
 def _blueprint_with_root(bp: dict[str, Any], workdir: Path) -> dict[str, Any]:

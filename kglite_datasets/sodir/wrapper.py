@@ -23,12 +23,12 @@ import json
 from pathlib import Path
 from typing import Any
 
+from kglite import KnowledgeGraph, from_blueprint, load
+
 # Rust binding submodule produced by maturin from `src/sodir.rs`. The
 # kglite_datasets.sodir subpackage is excluded from mypy stubtest
 # (mypy_stubtest.ini) so the bare import works without a stub.
 from kglite_datasets import _sodir_internal
-
-from kglite import KnowledgeGraph, from_blueprint, load
 
 INDEX_FILE = "sodir_index.json"
 GRAPH_SUBDIR = "graph"
@@ -151,7 +151,7 @@ def fetch_all(
 
     needed = _sodir_internal.datasets_for_blueprint(merged_json)
     index_path = workdir / INDEX_FILE
-    datasets = json.loads(index_path.read_text()).get("datasets", {}) if index_path.exists() else {}
+    datasets = json.loads(index_path.read_text(encoding="utf-8")).get("datasets", {}) if index_path.exists() else {}
     return {stem: datasets[stem] for stem in needed if stem in datasets}
 
 
@@ -179,7 +179,7 @@ def _resolve_blueprint(
     """Load the base blueprint, persist + apply any complement, and
     return the merged blueprint as a JSON string."""
     base_path = Path(blueprint_path) if blueprint_path else PACKAGED_BLUEPRINT
-    base_text = base_path.read_text()
+    base_text = base_path.read_text(encoding="utf-8")
     complement_text = _resolve_complement(workdir, complement_blueprint, use_complement, verbose)
     return _sodir_internal.merge_blueprint(base_text, complement_text, complement_overrides)
 
@@ -198,8 +198,8 @@ def _resolve_complement(
         incoming = Path(incoming)
         if not incoming.exists():
             raise FileNotFoundError(f"complement_blueprint not found: {incoming}")
-        payload = json.loads(incoming.read_text())  # validate before persisting
-        saved_path.write_text(json.dumps(payload, indent=2))
+        payload = json.loads(incoming.read_text(encoding="utf-8"))  # validate before persisting
+        saved_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         if verbose:
             print(f"  Registered complement blueprint at {saved_path}")
 
@@ -211,7 +211,7 @@ def _resolve_complement(
     if saved_path.exists():
         if verbose:
             print(f"  Applying saved complement blueprint ({saved_path.name}).")
-        return saved_path.read_text()
+        return saved_path.read_text(encoding="utf-8")
     return None
 
 
@@ -228,7 +228,7 @@ def _build_graph(
     bp = json.loads(json.dumps(blueprint))  # deep copy
     bp.setdefault("settings", {})["input_root"] = str(workdir)
     bp_path = workdir / "_compiled_blueprint.json"
-    bp_path.write_text(json.dumps(bp))
+    bp_path.write_text(json.dumps(bp), encoding="utf-8")
     try:
         if storage == "disk":
             g = from_blueprint(str(bp_path), verbose=False, save=False, storage="disk", path=str(graph_dir))
@@ -246,13 +246,13 @@ def _build_graph(
 def _write_source_meta(workdir: Path, graph_dir: Path, fetched: list[str]) -> None:
     """Stamp the disk graph with a build-time dataset snapshot."""
     index_path = workdir / INDEX_FILE
-    datasets = json.loads(index_path.read_text()).get("datasets", {}) if index_path.exists() else {}
+    datasets = json.loads(index_path.read_text(encoding="utf-8")).get("datasets", {}) if index_path.exists() else {}
     payload: dict[str, Any] = {
         "built_at_iso": datetime.now(timezone.utc).isoformat(),
         "fetched_during_build": sorted(fetched),
         "datasets": datasets,
     }
-    (graph_dir / SOURCE_META_FILENAME).write_text(json.dumps(payload, indent=2, sort_keys=True))
+    (graph_dir / SOURCE_META_FILENAME).write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def _print_refresh_summary(report: dict) -> None:

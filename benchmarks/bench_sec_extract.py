@@ -21,12 +21,12 @@ from __future__ import annotations
 
 import io
 import json
+from pathlib import Path
 import statistics
 import sys
 import tempfile
 import time
 import zipfile
-from pathlib import Path
 
 from kglite_datasets import _sec_internal as ours
 
@@ -40,27 +40,44 @@ def _synth_raw(workdir: Path) -> None:
     (raw / "submissions").mkdir(parents=True, exist_ok=True)
     (raw / "index").mkdir(parents=True, exist_ok=True)
     apple = {
-        "cik": 320193, "name": "Apple Inc.", "sic": "3571",
-        "sicDescription": "Electronic Computers", "stateOfIncorporation": "CA",
-        "fiscalYearEnd": "0930", "tickers": ["AAPL"], "exchanges": ["Nasdaq"],
+        "cik": 320193,
+        "name": "Apple Inc.",
+        "sic": "3571",
+        "sicDescription": "Electronic Computers",
+        "stateOfIncorporation": "CA",
+        "fiscalYearEnd": "0930",
+        "tickers": ["AAPL"],
+        "exchanges": ["Nasdaq"],
         "entityType": "operating",
         "formerNames": [{"name": "Apple Computer Inc", "from": "1976-04-01", "to": "2007-01-09"}],
-        "filings": {"recent": {
-            "accessionNumber": ["0000320193-24-000123", "0000320193-24-000089"],
-            "filingDate": ["2024-11-01", "2024-08-02"],
-            "reportDate": ["2024-09-28", "2024-06-29"],
-            "form": ["10-K", "10-Q"],
-            "primaryDocument": ["aapl-20240928.htm", "aapl-20240629.htm"],
-        }, "files": []},
+        "filings": {
+            "recent": {
+                "accessionNumber": ["0000320193-24-000123", "0000320193-24-000089"],
+                "filingDate": ["2024-11-01", "2024-08-02"],
+                "reportDate": ["2024-09-28", "2024-06-29"],
+                "form": ["10-K", "10-Q"],
+                "primaryDocument": ["aapl-20240928.htm", "aapl-20240629.htm"],
+            },
+            "files": [],
+        },
     }
     msft = {
-        "cik": 789019, "name": "Microsoft Corp", "sic": "7372",
-        "stateOfIncorporation": "WA", "tickers": ["MSFT"], "exchanges": ["Nasdaq"],
-        "filings": {"recent": {
-            "accessionNumber": ["0000789019-24-000045"],
-            "filingDate": ["2024-07-30"], "reportDate": ["2024-06-30"],
-            "form": ["8-K"], "primaryDocument": ["msft-20240730.htm"],
-        }, "files": []},
+        "cik": 789019,
+        "name": "Microsoft Corp",
+        "sic": "7372",
+        "stateOfIncorporation": "WA",
+        "tickers": ["MSFT"],
+        "exchanges": ["Nasdaq"],
+        "filings": {
+            "recent": {
+                "accessionNumber": ["0000789019-24-000045"],
+                "filingDate": ["2024-07-30"],
+                "reportDate": ["2024-06-30"],
+                "form": ["8-K"],
+                "primaryDocument": ["msft-20240730.htm"],
+            },
+            "files": [],
+        },
     }
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as z:
@@ -103,8 +120,12 @@ def main() -> int:
     result = {
         "iters": ITERS,
         "ours": ours_summ,
-        "baseline": {"median_ms": base_median, "min_ms": baseline.get("min_ms"),
-                     "source": baseline.get("source"), "date": baseline.get("date")},
+        "baseline": {
+            "median_ms": base_median,
+            "min_ms": baseline.get("min_ms"),
+            "source": baseline.get("source"),
+            "date": baseline.get("date"),
+        },
         "ratio": round(ratio, 3),
         "tolerance": tolerance,
     }
@@ -118,8 +139,7 @@ def main() -> int:
         print(f"  ratio   : {ratio:.2f}x baseline median (tolerance {tolerance}x)")
 
     if ratio > tolerance:
-        print(f"  FAIL: ours {ratio:.2f}x baseline median (> {tolerance}x) — perf regression",
-              file=sys.stderr)
+        print(f"  FAIL: ours {ratio:.2f}x baseline median (> {tolerance}x) — perf regression", file=sys.stderr)
         return 1
     print(f"  OK: within {tolerance}x baseline ({ratio:.2f}x)")
     return 0
