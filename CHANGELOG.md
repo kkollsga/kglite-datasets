@@ -35,16 +35,25 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 
 ### Known issues
 
-- **SEC `mode="disk"` produces a graph directory that cannot be reopened.**
-  `from_blueprint(..., storage="disk", path=...)` writes only `seg_000` (plus
-  `CURRENT`/`generations` if `save()` is called), and `kglite.load(dir)` then
-  fails with `FileFormatError: invalid id_indices.bin: directory contains an
-  unresolved type key`. Reproduces identically on kglite 0.13.0, 0.14.5 and
-  0.15.0, so it is **not** a 0.15 regression. Currently masked: the Rust
-  `graph_exists(Disk)` probe looks for `graph_manifest.json`, a filename kglite
-  never writes, so the cache-hit branch is never taken and disk-mode callers
-  silently rebuild every time instead of erroring. Engine-side; not worked
-  around here.
+- **Engine: a blueprint node type with zero data rows makes a disk-mode graph
+  directory unreadable.** `from_blueprint(..., storage="disk")` succeeds and
+  the graph is usable in-process, but `kglite.load(dir)` afterwards fails with
+  `FileFormatError: invalid id_indices.bin: directory contains an unresolved
+  type key`. Minimal repro (no kglite-datasets involvement): two CSVs sharing a
+  header where the second has no data rows — the same blueprint round-trips
+  fine in memory mode, and fine in disk mode as soon as the second type has one
+  row. Reproduces identically on kglite **0.13.0, 0.14.5 and 0.15.0**, so it is
+  **not** a 0.15 regression. This is an engine defect, not worked around here.
+
+  It reaches us through SEC `mode="disk"`: the blueprint declares 26 node
+  types, and any info-row type with no rows for the requested slice trips it —
+  in the synthetic fixture only `Company`, `Filing` and `SicCode` have rows, and
+  each of the other 23 fails on its own. Currently masked rather than fatal:
+  the Rust `graph_exists(Disk)` probe looks for `graph_manifest.json`, a
+  filename kglite never writes, so the cache-hit branch is never taken and
+  disk-mode callers silently rebuild every time instead of hitting the error.
+  Both halves should be fixed together — repairing `graph_exists` alone would
+  convert a silent cache miss into a hard failure.
 
 ## [0.1.0] - 2026-07-16
 
