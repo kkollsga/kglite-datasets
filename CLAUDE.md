@@ -72,6 +72,15 @@ Each pass through a file should leave it more compartmentalised than you found i
 
 ## Datasets discipline
 
+- **Every skip is accounted for, or the run fails.** A skipped test must carry
+  `@pytest.mark.live` (it needs a network service, and the env var that turns
+  it on is printed in the summary) or its reason must be on
+  `kglite_datasets/conftest.py::ALLOWED_SKIP_REASONS`. Anything else fails the
+  suite. There is no "skip it for now": a skip never turns red, so an ungoverned
+  one outlives its excuse indefinitely — the suite reported *4 passed, 24
+  skipped* for months, and 11 of those skips were a module that no longer even
+  imported. Mark it live, or delete it. Every run also prints a
+  `suite accounting:` line so "N passed" is never the whole story.
 - **Tests are network-free.** A loader test builds from a small raw input cached
   under `tests/fixtures/`, never a live fetch. CI must never depend on an
   external source being up. Keep a golden-graph fixture (deterministic node/edge

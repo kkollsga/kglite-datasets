@@ -9,7 +9,7 @@ node counts, edge counts, or the round-trip and every test still passed.
 
 So this gate freezes the shape of the graph the user actually receives, and
 exercises the create-then-reopen path the SEC wrapper depends on
-(``_build_graph`` -> ``save`` -> ``_load_graph``).
+(``_build_graph`` -> ``save`` -> ``_load_cached_graph``).
 
 Verified identical across kglite 0.13.0, 0.14.5 and 0.15.0 (2026-07-27) — the
 digest is engine-version-stable by construction: it covers node/edge topology,
@@ -104,7 +104,7 @@ def test_save_reload_round_trip(tmp_path: Path) -> None:
     """``.kgl`` save -> ``load`` returns an identical graph.
 
     This is the SEC wrapper's cache-hit contract (``_build_graph`` writes
-    ``sec.kgl``; a later ``SEC.open()`` returns ``_load_graph``'s reopen of it).
+    ``sec.kgl``; a later ``SEC.open()`` returns ``_load_cached_graph``'s reopen).
     Note the reopen deliberately uses ``kglite.load(path)`` with no ``storage=``
     kwarg: a ``.kgl`` checkpoint records no storage mode, and since kglite 0.15
     passing a ``storage=`` that disagrees with the loaded backend raises

@@ -96,6 +96,13 @@ force-sort-within-sections = true
 # suites (SEC/Sodir/Wikidata) self-skip unless their integration env var is
 # set — e.g. KGLITE_SEC_INTEGRATION=1 — so the default run is fully offline.
 testpaths = ["kglite_datasets"]
+markers = [
+    "live: requires a live network service (SEC EDGAR / Sodir / Wikidata). Opt in with the suite's integration env var; never part of the default run. This is also the suite-accounting contract — see kglite_datasets/conftest.py: a skipped test without it fails the run.",
+]
+# A mistyped marker must be a collection error, not a silently inert
+# decorator. `@pytest.mark.liv` would otherwise leave the test skipped and
+# unaccounted — caught by conftest, but at the wrong end of the loop.
+addopts = "--strict-markers"
 
 [tool.maturin]
 manifest-path = "crates/kglite-datasets-py/Cargo.toml"

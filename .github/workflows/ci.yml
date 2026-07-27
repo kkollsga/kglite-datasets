@@ -133,5 +133,7 @@ jobs:
       - name: Run the offline Python suite
         # Live-API suites (SEC/Sodir/Wikidata) self-skip without their
         # KGLITE_*_INTEGRATION env vars — the default run is fully offline and
-        # includes the SEC extract golden (test_parity_golden.py).
+        # includes the SEC goldens plus the per-form parser suite.
+        # `kglite_datasets/conftest.py` fails the run on any skip that is not
+        # accounted for, so a newly-disabled test cannot ride along green.
         run: .venv/bin/python -m pytest -v --tb=short

@@ -26,6 +26,11 @@ import zipfile
 
 import pytest
 
+# Every test here hits SEC over the network. `live` is the suite-accounting
+# marker (see kglite_datasets/conftest.py) that makes those skips legitimate
+# and countable instead of invisible.
+pytestmark = pytest.mark.live
+
 
 def _integration_enabled() -> bool:
     return os.environ.get("KGLITE_SEC_INTEGRATION") == "1"

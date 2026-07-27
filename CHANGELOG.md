@@ -19,6 +19,32 @@ semantic versioning (workspace version in the root `Cargo.toml`).
   it so it cannot be missing; and a new `python-lint` CI job runs
   `ruff check` + `ruff format --check` on every push.
 
+- **GATE #5 — the built-graph cache** (`kglite_datasets/tests/test_graph_cache.py`).
+  Seven offline tests pinning the disk-cache probe against a real kglite disk
+  graph, the rejection of an uncommitted build, and the rebuild-on-unloadable
+  fallback. See Fixed for what they caught.
+
+- **GATE #6 — the per-form SEC parsers, offline**
+  (`kglite_datasets/sec/tests/test_extract_offline.py`). Nine tests taking a
+  synthetic Form 4 / 13F information table / 8-K cover page / Exhibit 21
+  through the extract pass and into the built graph, asserting both the CSV
+  boundary (files read, rows emitted) and the resulting topology. Replaces
+  `test_usecases_v2.py`, which declared 11 tests, skipped all of them at module
+  scope, and could not have run: it called `_sec_internal.extract_processed`
+  and six sibling bindings that no longer exist. Its payloads were recoverable;
+  its fixture was the broken part — it staged the documents but declared only a
+  `10-K` per company in `submissions.zip`, and every extractor resolves inputs
+  through `processed/filing_index.csv`, so nothing was ever read.
+
+- **GATE #7 — skip accounting** (`kglite_datasets/conftest.py`). Every run
+  prints a `suite accounting:` line, and any skipped test that neither carries
+  `@pytest.mark.live` nor matches an allow-listed reason **fails the run**.
+  A skip is the one outcome that costs nothing and never turns red, so left
+  ungoverned it accumulates — this suite reported *4 passed, 24 skipped* while
+  green. It now reports *20 passed, 13 skipped*, and the 13 are the live-SEC
+  suites, marked as such. `--strict-markers` is on so a mistyped marker is a
+  collection error rather than an inert decorator.
+
 ### Fixed
 
 - **SEC `mode="disk"` never cached, for two independent reasons — both fixed.**

@@ -142,10 +142,17 @@ def _record(name: str, summary: str, timing: dict[str, Any]) -> None:
     )
 
 
-pytestmark = pytest.mark.skipif(
-    not _integration_enabled(),
-    reason="set KGLITE_SEC_INTEGRATION=1 to enable (hits live SEC)",
-)
+# `live` is the suite-accounting contract (see kglite_datasets/conftest.py): a
+# skipped test must declare *why* it can never run in the default suite, and
+# "it hits a network service" is the only accepted answer. Without the marker
+# these 11 skips would fail the run rather than be counted.
+pytestmark = [
+    pytest.mark.live,
+    pytest.mark.skipif(
+        not _integration_enabled(),
+        reason="set KGLITE_SEC_INTEGRATION=1 to enable (hits live SEC)",
+    ),
+]
 
 
 # ── use cases ────────────────────────────────────────────────────────
