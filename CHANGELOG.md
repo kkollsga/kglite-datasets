@@ -20,9 +20,11 @@ semantic versioning (workspace version in the root `Cargo.toml`).
   `ruff check` + `ruff format --check` on every push.
 
 - **GATE #5 — the built-graph cache** (`kglite_datasets/tests/test_graph_cache.py`).
-  Seven offline tests pinning the disk-cache probe against a real kglite disk
-  graph, the rejection of an uncommitted build, and the rebuild-on-unloadable
-  fallback. See Fixed for what they caught.
+  Eight offline tests pinning the disk-cache probe against a real kglite disk
+  graph, the rejection of an uncommitted build and of a dangling `CURRENT`
+  pointer, and the rebuild-on-unloadable fallback — the last exercised against
+  a directory that legitimately passes the probe and fails only on load. See
+  Fixed for what they caught.
 
 - **GATE #6 — the per-form SEC parsers, offline**
   (`kglite_datasets/sec/tests/test_extract_offline.py`). Nine tests taking a
@@ -41,7 +43,7 @@ semantic versioning (workspace version in the root `Cargo.toml`).
   `@pytest.mark.live` nor matches an allow-listed reason **fails the run**.
   A skip is the one outcome that costs nothing and never turns red, so left
   ungoverned it accumulates — this suite reported *4 passed, 24 skipped* while
-  green. It now reports *20 passed, 13 skipped*, and the 13 are the live-SEC
+  green. It now reports *21 passed, 13 skipped*, and the 13 are the live-SEC
   suites, marked as such. `--strict-markers` is on so a mistyped marker is a
   collection error rather than an inert decorator.
 
@@ -57,8 +59,16 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 
   The probe now looks for kglite's real commit markers — `CURRENT` (generation
   layout) or `disk_graph_meta.json` (flat) — via a new shared crate module
-  `disk_graph`, which also absorbs the copy of that logic that already existed
-  in the sodir layout. The disk build now calls `save()` explicitly, matching
+  `disk_graph`, exposed to Python as `kglite_datasets._disk_graph`. That module
+  absorbs the two *other* copies of this logic the repo already had: the sodir
+  Rust layout and the wikidata Python wrapper had each derived the right answer
+  separately while the SEC one, the only load-bearing copy, was wrong. One
+  question should not have three implementations. `CURRENT` is also
+  *dereferenced* rather than merely detected: kglite writes it last, by atomic
+  rename, only after verifying the staged generation — but a directory a user
+  has half-deleted or partially restored can still carry a dangling pointer,
+  and one extra `stat` turns that from "probes valid, refuses to load" into an
+  ordinary cache miss. The disk build now calls `save()` explicitly, matching
   the sodir and wikidata wrappers.
 
 - **A cached graph that will not re-open is now a cache miss, not an error.**
@@ -125,6 +135,19 @@ semantic versioning (workspace version in the root `Cargo.toml`).
   treated as a cache miss and the graph is rebuilt. Users on `mode="disk"`
   therefore pay a full rebuild on every open until the engine fix ships — the
   same cost as before, but now deliberate and warned about rather than silent.
+
+  **The blast radius is wider than blueprints with empty types** (confirmed by
+  the kglite engine agent, 2026-07-27). A *read-only* query naming a label that
+  does not exist — `MATCH (n:Ghost {id: 1})` — caches a build-on-miss id index
+  under that label and poisons the next `save()` identically. So a disk graph
+  can be made unloadable by a query that mutates nothing, and **any** cached
+  directory in the wild may carry this regardless of how it was built. That is
+  why the fallback is required independently of the probe fix, and why it is
+  tested against a directory that legitimately passes the probe and only fails
+  on load. The engine fix also lands a narrow reader recovery — an unresolvable
+  directory entry is skipped only when it holds zero entries, a populated one
+  still fails loudly — so already-broken directories become loadable once it
+  ships, without weakening corruption detection.
 
 ## [0.1.0] - 2026-07-16
 

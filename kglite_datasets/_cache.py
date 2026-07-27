@@ -25,6 +25,30 @@ import warnings
 
 from kglite import KnowledgeGraph, load
 
+from kglite_datasets import _disk_graph
+
+
+def commit_marker(graph_dir: Path | str) -> Optional[Path]:
+    """The file whose mtime dates the committed kglite disk graph in
+    ``graph_dir``, or ``None`` when nothing is committed.
+
+    A thin pass-through to the Rust ``disk_graph`` module — the single place
+    that knows what kglite writes on publish. Python callers go through here
+    instead of re-deriving it, which is how the SEC loader ended up probing
+    for a filename the engine has never written.
+    """
+    marker = _disk_graph.commit_marker(str(graph_dir))
+    return Path(marker) if marker is not None else None
+
+
+def graph_exists(graph_dir: Path | str) -> bool:
+    """True when ``graph_dir`` holds a committed kglite disk graph.
+
+    A probe, not a validation — see :func:`load_cached_graph` for why the
+    caller must still be able to fall back to a rebuild.
+    """
+    return bool(_disk_graph.exists(str(graph_dir)))
+
 
 class StaleGraphCacheWarning(UserWarning):
     """A cached graph existed but could not be re-opened, so it is being

@@ -63,10 +63,15 @@ impl Workdir {
     }
 
     /// The file marking `graph/` as a committed kglite disk graph — `CURRENT`
-    /// (generation layout) or `disk_graph_meta.json` (flat). Its mtime drives
-    /// the disk-mode "reopen → load, don't rebuild" cooldown short-circuit.
-    /// Shared with the SEC layout via [`crate::disk_graph`].
-    pub fn disk_graph_meta(&self) -> PathBuf {
+    /// (generation layout) or `disk_graph_meta.json` (flat) — or `None` when
+    /// nothing is committed. Its mtime drives the disk-mode "reopen → load,
+    /// don't rebuild" cooldown short-circuit. Shared with the SEC layout via
+    /// [`crate::disk_graph`].
+    ///
+    /// Renamed from `disk_graph_meta` in 0.1.1: the returned path is usually
+    /// `CURRENT`, so the old name described only the legacy layout, and the
+    /// old `PathBuf` return could not express "no graph here".
+    pub fn disk_graph_marker(&self) -> Option<PathBuf> {
         crate::disk_graph::commit_marker(&self.graph_dir())
     }
 
@@ -77,15 +82,18 @@ impl Workdir {
 
     /// True if a disk-mode graph already exists.
     pub fn graph_exists(&self) -> bool {
-        self.disk_graph_meta().is_file()
+        crate::disk_graph::exists(&self.graph_dir())
     }
 
-    /// Age in days of the disk-mode graph metadata, or `None` if no
-    /// graph has been built. Drives the disk-mode cooldown short-circuit
-    /// in `Workdir`-managed dataset fetchers. Lifted from kglite-py in
-    /// 0.10.1.
+    /// Age in days of the disk-mode graph, or `None` if no graph has been
+    /// built. Drives the disk-mode cooldown short-circuit in
+    /// `Workdir`-managed dataset fetchers. Lifted from kglite-py in 0.10.1.
+    ///
+    /// `None` also covers "a marker exists but the generation it names does
+    /// not" — an incomplete directory must read as *no cache*, not as an
+    /// infinitely fresh one that the caller then fails to load.
     pub fn disk_graph_age_days(&self) -> Option<f64> {
-        crate::sodir::index::file_mtime_age_days(&self.disk_graph_meta())
+        crate::sodir::index::file_mtime_age_days(&self.disk_graph_marker()?)
     }
 
     /// Create the `csv/` and `graph/` directories (idempotent).
@@ -107,10 +115,23 @@ mod tests {
         assert_eq!(w.csv_path("field"), Path::new("/tmp/sodir/csv/field.csv"));
         assert_eq!(w.index_file(), Path::new("/tmp/sodir/sodir_index.json"));
         assert_eq!(w.graph_dir(), Path::new("/tmp/sodir/graph"));
-        assert_eq!(
-            w.disk_graph_meta(),
-            Path::new("/tmp/sodir/graph/disk_graph_meta.json")
-        );
+        // No graph on disk → no marker. The path shapes themselves are
+        // pinned in `crate::disk_graph`.
+        assert_eq!(w.disk_graph_marker(), None);
+    }
+
+    /// A `CURRENT` naming a generation that is not there must read as "no
+    /// cache" for *both* the probe and the cooldown clock — otherwise the
+    /// short-circuit sees an infinitely fresh graph it cannot load.
+    #[test]
+    fn incomplete_generation_is_neither_present_nor_fresh() {
+        let tmp = tempfile::tempdir().unwrap();
+        let w = Workdir::new(tmp.path());
+        w.ensure_dirs().unwrap();
+        std::fs::write(w.graph_dir().join("CURRENT"), "gen_00000000000000000001\n").unwrap();
+        assert!(!w.graph_exists());
+        assert_eq!(w.disk_graph_marker(), None);
+        assert_eq!(w.disk_graph_age_days(), None);
     }
 
     #[test]

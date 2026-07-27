@@ -15,6 +15,7 @@
 
 use pyo3::prelude::*;
 
+mod disk_graph;
 mod sec;
 mod sodir;
 mod wikidata;
@@ -24,6 +25,8 @@ mod wikidata;
 #[pymodule]
 fn kglite_datasets(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
+    // Shared, loader-independent: `kglite_datasets._disk_graph`.
+    disk_graph::register(py, m)?;
     // Register the per-loader internal submodules
     // (`kglite_datasets._{sec,sodir,wikidata}_internal`).
     sec::register(py, m)?;

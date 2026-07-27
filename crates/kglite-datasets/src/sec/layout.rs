@@ -147,9 +147,10 @@ impl Workdir {
     }
 
     /// The file marking `graph/disk/` as a committed kglite disk graph —
-    /// `CURRENT` (generation layout) or `disk_graph_meta.json` (flat). See
-    /// [`crate::disk_graph`]; the mtime also dates the cache.
-    pub fn disk_graph_marker(&self) -> PathBuf {
+    /// `CURRENT` (generation layout) or `disk_graph_meta.json` (flat), or
+    /// `None` when nothing is committed. See [`crate::disk_graph`]; the
+    /// mtime also dates the cache.
+    pub fn disk_graph_marker(&self) -> Option<PathBuf> {
         crate::disk_graph::commit_marker(&self.graph_dir(StorageMode::Disk))
     }
 
@@ -248,7 +249,8 @@ mod tests {
     /// Regression: the disk probe looked for `graph_manifest.json`, a name
     /// kglite has never written, so `mode="disk"` never hit its cache and
     /// silently rebuilt on every open. Both real markers must be recognised
-    /// and the phantom one must not be.
+    /// and the phantom one must not be. Layout semantics are pinned in
+    /// `crate::disk_graph`; this asserts the SEC workdir wires through.
     #[test]
     fn disk_graph_exists_tracks_kglite_commit_markers() {
         let tmp = tempdir();
@@ -268,11 +270,25 @@ mod tests {
 
         std::fs::write(dir.join("disk_graph_meta.json"), b"{}").unwrap();
         assert!(w.graph_exists(StorageMode::Disk), "flat layout");
-        assert_eq!(w.disk_graph_marker(), dir.join("disk_graph_meta.json"));
+        assert_eq!(
+            w.disk_graph_marker(),
+            Some(dir.join("disk_graph_meta.json"))
+        );
 
-        std::fs::write(dir.join("CURRENT"), b"gen_00000000000000000001\n").unwrap();
+        // A CURRENT pointer takes over — but only once the generation it
+        // names is actually present.
+        let generation = "gen_00000000000000000001";
+        std::fs::write(dir.join("CURRENT"), format!("{generation}\n")).unwrap();
+        assert!(
+            !w.graph_exists(StorageMode::Disk),
+            "pointer to a missing generation is not a cache hit"
+        );
+
+        let gen_dir = dir.join("generations").join(generation);
+        std::fs::create_dir_all(&gen_dir).unwrap();
+        std::fs::write(gen_dir.join("disk_graph_meta.json"), b"{}").unwrap();
         assert!(w.graph_exists(StorageMode::Disk), "generation layout");
-        assert_eq!(w.disk_graph_marker(), dir.join("CURRENT"));
+        assert_eq!(w.disk_graph_marker(), Some(dir.join("CURRENT")));
 
         std::fs::remove_dir_all(&tmp).ok();
     }

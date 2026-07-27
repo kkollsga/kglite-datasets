@@ -38,7 +38,7 @@ from kglite import KnowledgeGraph
 # kglite_datasets.wikidata is excluded from mypy stubtest
 # (mypy_stubtest.ini) so the bare import works without a stub.
 from kglite_datasets import _wikidata_internal
-from kglite_datasets._cache import load_cached_graph
+from kglite_datasets._cache import commit_marker, load_cached_graph
 
 SOURCE_META_FILENAME = "wikidata_source.json"
 GRAPH_SUBDIR = "graph"
@@ -180,14 +180,18 @@ def _ensure_dump(workdir: Path, cooldown_days: int, verbose: bool) -> tuple[Path
 
 
 def _commit_marker(graph_dir: Path) -> Path:
-    """The file marking ``graph_dir`` as a committed kglite disk graph.
+    """The file whose mtime dates the committed graph in ``graph_dir``.
 
-    Generation-format graphs publish ``CURRENT`` atomically; older graphs use
-    the root ``disk_graph_meta.json`` directly. Mirrors the Rust
-    ``disk_graph::commit_marker`` the sec/sodir loaders probe through.
+    Delegates to the shared Rust probe (``kglite_datasets.disk_graph``) rather
+    than re-deciding what a committed graph looks like — this repo previously
+    held three separate answers to that question and shipped the wrong one.
+
+    Falls back to the conventional root path when nothing is committed, so the
+    caller can hand it to ``decide_cache_freshness`` unchanged: a path that
+    does not exist reads there as "no cache", which is the right answer.
     """
-    current = graph_dir / "CURRENT"
-    return current if current.is_file() else graph_dir / "disk_graph_meta.json"
+    marker = commit_marker(graph_dir)
+    return marker if marker is not None else graph_dir / "disk_graph_meta.json"
 
 
 def _load_cached(

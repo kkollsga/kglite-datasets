@@ -54,6 +54,21 @@ def _write_real_disk_graph(dest: Path) -> None:
     del g
 
 
+def _damage_live_generation(dest: Path) -> None:
+    """Corrupt a byte-level file *inside* the published generation.
+
+    Leaves the completion protocol intact — `CURRENT` still names a generation
+    that still holds `disk_graph_meta.json` — so the directory legitimately
+    probes as a cache hit and only fails when the engine reads it. That is the
+    real shape of the case this fallback exists for: directories already on
+    disk, written by a version of the engine with a defect, or since damaged.
+    Faking it with a dangling pointer would *not* reproduce it, because the
+    probe correctly rejects that before any load is attempted.
+    """
+    generation = (dest / "CURRENT").read_text(encoding="utf-8").strip()
+    (dest / "generations" / generation / "interner.bin.zst").write_bytes(b"\0" * 8)
+
+
 # ── the probe ────────────────────────────────────────────────────────────
 
 
@@ -90,6 +105,30 @@ def test_disk_probe_ignores_an_uncommitted_build(tmp_path: Path) -> None:
     assert not _sec_internal.graph_exists(str(tmp_path), "disk")
 
 
+def test_disk_probe_dereferences_the_pointer(tmp_path: Path) -> None:
+    """``CURRENT`` naming a generation that is not there is not a cache hit.
+
+    kglite writes ``CURRENT`` last, by atomic rename, only after the staged
+    generation is verified and fsync'd — so *kglite* never leaves a dangling
+    pointer. Users do: a half-deleted directory, a partial backup restore, a
+    copy that did not follow into ``generations/``. Trusting the pointer's
+    presence would report those as cache hits and then fail on load; one extra
+    stat turns them into an ordinary miss.
+    """
+    d = _disk_dir(tmp_path)
+    d.mkdir(parents=True)
+    generation = "gen_00000000000000000001"
+    (d / "CURRENT").write_text(f"{generation}\n", encoding="utf-8")
+    assert not _sec_internal.graph_exists(str(tmp_path), "disk"), "dangling pointer"
+
+    gen_dir = d / "generations" / generation
+    gen_dir.mkdir(parents=True)
+    assert not _sec_internal.graph_exists(str(tmp_path), "disk"), "generation without metadata"
+
+    (gen_dir / "disk_graph_meta.json").write_text("{}", encoding="utf-8")
+    assert _sec_internal.graph_exists(str(tmp_path), "disk")
+
+
 def test_memory_probe_tracks_the_kgl_file(tmp_path: Path) -> None:
     d = Path(_sec_internal.graph_dir(str(tmp_path), "memory"))
     d.mkdir(parents=True)
@@ -104,17 +143,19 @@ def test_memory_probe_tracks_the_kgl_file(tmp_path: Path) -> None:
 def test_unloadable_cache_degrades_to_none(tmp_path: Path) -> None:
     """A directory that probes as a graph but will not load yields ``None``.
 
-    ``None`` is the caller's signal to rebuild. Without this the corrected
-    probe would surface engine load errors (e.g. the zero-row disk defect in
-    CHANGELOG "Known issues") straight to the user, who would then have to
-    delete the workdir by hand before their code could run again.
+    ``None`` is the caller's signal to rebuild. Without it the corrected probe
+    would surface engine load errors straight to the user, who would then have
+    to delete the workdir by hand before their code could run again — and
+    there are two live sources of exactly that (see CHANGELOG "Known issues"):
+    a blueprint type with zero data rows, and a *read-only* query naming a
+    label that does not exist, which poisons the next ``save()`` identically.
+    Neither is visible to a probe, and both are already baked into directories
+    sitting on users' disks.
     """
     d = _disk_dir(tmp_path)
-    d.mkdir(parents=True)
-    # Probes as committed (a root CURRENT pointer) but names a generation that
-    # does not exist — exactly the shape of a truncated or half-published dir.
-    (d / "CURRENT").write_text("gen_00000000000000000001\n", encoding="utf-8")
-    assert _sec_internal.graph_exists(str(tmp_path), "disk"), "probe must fire"
+    _write_real_disk_graph(d)
+    _damage_live_generation(d)
+    assert _sec_internal.graph_exists(str(tmp_path), "disk"), "probe must still fire"
 
     with pytest.warns(StaleGraphCacheWarning):
         assert load_cached_graph(d, label="SEC") is None
@@ -139,13 +180,20 @@ def test_sec_wrapper_cache_helper_degrades(tmp_path: Path) -> None:
     """
     from kglite_datasets.sec.wrapper import _load_cached_graph
 
-    empty, broken, good = (tmp_path / n for n in ("empty", "broken", "good"))
+    empty, dangling, broken, good = (tmp_path / n for n in ("empty", "dangling", "broken", "good"))
 
     assert _load_cached_graph(empty, "disk") is None, "no cache at all"
 
-    d = _disk_dir(broken)
+    # Rejected by the probe, before any load is attempted — so no warning.
+    d = _disk_dir(dangling)
     d.mkdir(parents=True)
     (d / "CURRENT").write_text("gen_00000000000000000009\n", encoding="utf-8")
+    assert _load_cached_graph(dangling, "disk") is None, "dangling pointer"
+
+    # Passes the probe, fails the load — the warning path.
+    d = _disk_dir(broken)
+    _write_real_disk_graph(d)
+    _damage_live_generation(d)
     with pytest.warns(StaleGraphCacheWarning):
         assert _load_cached_graph(broken, "disk") is None, "unloadable cache"
 
