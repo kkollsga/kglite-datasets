@@ -28,7 +28,7 @@ __pycache__/
 /.hypothesis/
 
 # Rust build artifacts
-/target/
+/target
 
 # Built distribution artifacts — wheels + sdists are produced fresh by the
 # release workflow (maturin-action → PyPI), never committed.
