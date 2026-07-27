@@ -23,6 +23,10 @@ semantic versioning (workspace version in the root `Cargo.toml`).
   kglite 0.13.0, 0.14.5 and 0.15.0, so the `kglite>=0.13` floor stays as-is;
   `pyproject.toml` now records why, so the pin reads as a decision rather than
   an oversight.
+- CI's Python job now runs against **both ends** of the declared engine range
+  (`kglite>=0.13` and `kglite==0.13.0`) on each OS. A floor that is never
+  exercised is a floor we cannot honestly advertise — previously CI only ever
+  resolved the newest kglite, so the lower bound was untested.
 - The synthetic SEC `raw/` fixture is now defined once in
   `kglite_datasets/tests/synth_sec.py` instead of being copy-pasted into each
   test module. Content is unchanged — the frozen extract golden is untouched.
