@@ -6,6 +6,18 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-07-28
+
+### Fixed
+
+- **The sdist shipped no LICENSE file.** An earlier correction for a
+  *duplicated* LICENSE removed one too many, leaving a published-shaped sdist
+  carrying none at all. `pyproject.toml` declares `license = "MIT"` — the
+  PEP 639 SPDX string form, which names the licence but does not include the
+  file — without the matching `license-files` entry that kglite and codingest
+  both carry. Verified by building the sdist and listing its contents rather
+  than by reading config: 0 LICENSE entries before, exactly 1 after.
+
 ### Added
 
 - **GATE #4 — the Python lint gate now actually runs.** `ruff` was wired into
