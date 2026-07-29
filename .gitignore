@@ -3,8 +3,23 @@
 # reference), `bench/scripts/` + `bench/results/`, `todos.md`. Auto-purged by
 # the dev-docs-cleanup skill: `temp/` (>1d, offload large output here to dodge
 # the token gate), `bench/out/` (>14d, built graphs / raw dataset dumps),
-# `bin/` (>7d, soft-deleted). Local working state, never committed.
-/dev-docs/
+# `bin/` (>7d, soft-deleted). Local working state, never committed — with ONE
+# exception: `bench/scripts/` IS tracked. Harnesses there are hand-authored
+# source that would otherwise exist in exactly one copy, in a tier nothing ever
+# purges — a stray `rm -rf` loses work no backup, review or CI ever saw. The
+# directory is empty today; un-ignoring it now means the first harness written
+# here is tracked by default instead of silently unbacked. Build output and
+# captures produced inside a harness dir stay ignored.
+# (`/dir/*` + `!/dir/sub/` so a subdir can be re-included.)
+/dev-docs/*
+!/dev-docs/bench/
+/dev-docs/bench/*
+!/dev-docs/bench/scripts/
+/dev-docs/bench/scripts/**/target/
+/dev-docs/bench/scripts/**/__pycache__/
+/dev-docs/bench/scripts/**/node_modules/
+/dev-docs/bench/scripts/**/*.kgl
+/dev-docs/bench/scripts/**/*.kgle
 
 # Inbox of feedback/coordination notes (`unread/` = needs action, `read/` =
 # archive). Kept at the repo root; local working state, never committed —
