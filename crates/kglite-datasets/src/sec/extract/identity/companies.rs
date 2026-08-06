@@ -314,24 +314,19 @@ pub fn emit_sic_index(workdir: &Workdir, sic_index: &HashMap<String, String>) ->
 mod tests {
     use super::*;
 
-    /// Isolated tempdir under the OS temp directory.
-    fn tempdir() -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "kglite-sec-companies-test-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
+    /// Atomically unique tempdir: clock-derived names can collide when these
+    /// tests start in parallel on filesystems with coarse timestamp precision.
+    fn tempdir() -> tempfile::TempDir {
+        tempfile::Builder::new()
+            .prefix("kglite-sec-companies-test-")
+            .tempdir()
+            .unwrap()
     }
 
     #[test]
     fn discover_corpus_ciks_unions_filings_and_financials() {
         let tmp = tempdir();
-        let wd = Workdir::new(&tmp);
+        let wd = Workdir::new(tmp.path());
         wd.ensure_dirs(None).unwrap();
 
         // raw/filings/{cik}/ — three CIK dirs + one non-numeric name
@@ -356,17 +351,14 @@ mod tests {
             discover_corpus_ciks(&wd),
             vec![51143, 320193, 789019, 1318605]
         );
-
-        std::fs::remove_dir_all(&tmp).ok();
     }
 
     #[test]
     fn discover_corpus_ciks_empty_when_no_raw_tree() {
         let tmp = tempdir();
         // No ensure_dirs — raw/filings and raw/financials don't exist.
-        let wd = Workdir::new(&tmp);
+        let wd = Workdir::new(tmp.path());
         assert!(discover_corpus_ciks(&wd).is_empty());
-        std::fs::remove_dir_all(&tmp).ok();
     }
 
     #[test]

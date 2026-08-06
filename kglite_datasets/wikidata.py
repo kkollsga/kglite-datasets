@@ -23,7 +23,8 @@ Layout managed under `workdir`:
         latest-truthy.nt.bz2.part     # in-progress download (resumable)
         graph[_<N>m]/                 # disk graph built from the dump
             wikidata_source.json      # build-time dump metadata
-            disk_graph_meta.json
+            CURRENT                   # committed generation pointer
+            generations/<generation>/ # engine-owned graph files
 """
 
 from __future__ import annotations
@@ -47,7 +48,7 @@ GRAPH_SUBDIR = "graph"
 # graph-dir path, entity_limit_millions). Re-running `open(workdir)` in
 # the same process (the Jupyter "rerun-cell" workflow) returns the
 # already-loaded instance instead of re-allocating the ~400 MB state.
-# Invalidated when disk_graph_meta.json mtime advances or
+# Invalidated when the committed graph marker's mtime advances or
 # `force_rebuild=True` is passed. Memory-mode opens skip this cache.
 _PROCESS_CACHE: dict[tuple[str, int | None], tuple[KnowledgeGraph, float]] = {}
 

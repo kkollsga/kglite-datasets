@@ -30,7 +30,7 @@ MATURIN   := $(VENV)/bin/maturin
 # Dev toolchain. `kglite` is the runtime engine dependency (see pyproject
 # `dependencies`); the rest are what the gate itself needs. Keep in sync with
 # the CI workflow's install steps.
-DEV_DEPS  := maturin pytest ruff "kglite>=0.13"
+DEV_DEPS  := maturin pytest ruff "kglite>=0.15.6"
 # Every Python path ruff owns. One list, referenced by check and format alike,
 # so the two can never drift apart and silently stop covering a directory.
 PY_PATHS  := kglite_datasets benchmarks
@@ -147,7 +147,7 @@ venv:
 
 ## Build the Python extension into the local venv.
 develop:
-	$(MATURIN) develop
+	VIRTUAL_ENV=$(abspath $(VENV)) $(MATURIN) develop
 
 ## Run the offline Python test suite (live-API suites self-skip without their
 ## integration env vars). Needs `make develop` + a kglite wheel in .venv.

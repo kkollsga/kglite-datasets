@@ -696,12 +696,10 @@ def _load_cached_graph(workdir: Path, mode: str, *, verbose: bool = False) -> Op
     The second case matters because the disk-mode probe used to look for
     ``graph_manifest.json`` — a filename kglite never writes — so every
     ``mode="disk"`` open missed its cache and rebuilt. Fixing the probe on its
-    own would have turned that silent rebuild into a hard user-facing failure
-    for anyone whose graph directory kglite cannot currently reopen (see the
-    zero-row engine defect in CHANGELOG "Known issues"). Probe + fallback ship
-    together so the wrapper is correct either way: while the defect stands,
-    disk callers keep rebuilding exactly as they did before; once it is fixed,
-    the cache starts hitting with no further change here.
+    own would have turned that silent rebuild into a hard user-facing failure.
+    The current engine floor repairs the known zero-row cache defect, but the
+    fallback remains necessary for damaged caches and directories written by
+    older engines.
     """
     if not _sec_internal.graph_exists(str(workdir), mode):
         return None
@@ -733,21 +731,13 @@ def _build_graph(workdir: Path, mode: str, verbose: bool) -> KnowledgeGraph:
             g.save(str(graph_dir / "sec.kgl"))
             return g
         if mode == "disk":
-            g = from_blueprint(
+            return from_blueprint(
                 str(compiled),
                 verbose=False,
-                save=False,
+                save=True,
                 storage="disk",
                 path=str(graph_dir),
             )
-            # `save()` is what publishes the root CURRENT pointer, and it is
-            # what makes `kglite.load(graph_dir)` work on the next open. This
-            # used to pass `save=True` to `from_blueprint` instead, which only
-            # writes to the path named by the blueprint's `output` key — our
-            # blueprint has none, so the call was a no-op and the disk graph
-            # was never committed. Matches the sodir and wikidata wrappers.
-            g.save(str(graph_dir))
-            return g
         raise ValueError(f"unknown mode: {mode!r}")
     finally:
         compiled.unlink(missing_ok=True)

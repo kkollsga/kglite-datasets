@@ -237,8 +237,7 @@ def _build_graph(
     bp_path.write_text(json.dumps(bp), encoding="utf-8")
     try:
         if storage == "disk":
-            g = from_blueprint(str(bp_path), verbose=False, save=False, storage="disk", path=str(graph_dir))
-            g.save(str(graph_dir))
+            g = from_blueprint(str(bp_path), verbose=False, save=True, storage="disk", path=str(graph_dir))
         else:
             g = from_blueprint(str(bp_path), verbose=False, save=False)
     finally:

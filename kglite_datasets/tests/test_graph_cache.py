@@ -5,15 +5,15 @@ Two coupled defects lived here, and repairing either alone makes things worse:
 1. The Rust ``graph_exists(Disk)`` probe looked for ``graph_manifest.json`` —
    a filename kglite has never written — so the disk cache never hit and every
    ``mode="disk"`` open silently rebuilt from scratch.
-2. ``_build_graph(mode="disk")`` passed ``save=True`` to ``from_blueprint``,
-   which only writes to the path named by the blueprint's ``output`` key. Our
-   blueprint has none, so the call was a no-op: nothing was ever committed to
-   the graph directory in the first place.
+2. Before kglite 0.15.2, ``_build_graph(mode="disk")`` passed ``save=True`` to
+   ``from_blueprint``, but the engine ignored the supplied disk ``path`` and
+   committed nothing. The current floor fixes that contract; this suite now
+   pins it directly so the workaround cannot return unnoticed.
 
 Fixing (1) on its own would have converted a silent cache miss into a hard
-user-facing failure for any graph kglite cannot currently reopen. So the fix
-also makes the cache path *degrade*: a cached graph that will not load is a
-miss, and the caller rebuilds.
+user-facing failure for old or damaged graphs. So the fix also makes the cache
+path *degrade*: a cached graph that will not load is a miss, and the caller
+rebuilds.
 
 Everything here is offline — no network, no live SEC.
 """
@@ -146,11 +146,10 @@ def test_unloadable_cache_degrades_to_none(tmp_path: Path) -> None:
     ``None`` is the caller's signal to rebuild. Without it the corrected probe
     would surface engine load errors straight to the user, who would then have
     to delete the workdir by hand before their code could run again — and
-    there are two live sources of exactly that (see CHANGELOG "Known issues"):
-    a blueprint type with zero data rows, and a *read-only* query naming a
-    label that does not exist, which poisons the next ``save()`` identically.
-    Neither is visible to a probe, and both are already baked into directories
-    sitting on users' disks.
+    old engine versions could write caches that passed the commit probe but
+    could not be reopened. The current floor repairs and recovers the known
+    zero-row/unknown-label case, but arbitrary truncation or corruption is
+    still invisible to a probe.
     """
     d = _disk_dir(tmp_path)
     _write_real_disk_graph(d)
@@ -204,24 +203,15 @@ def test_sec_wrapper_cache_helper_degrades(tmp_path: Path) -> None:
 # ── the two halves together ──────────────────────────────────────────────
 
 
-def test_disk_build_commits_and_reopen_never_raises(tmp_path: Path) -> None:
+def test_disk_build_commits_and_reopens(tmp_path: Path) -> None:
     """Build SEC ``mode="disk"`` for real, then reopen it the way the wrapper
-    does. Three things must hold regardless of the engine's state:
+    does. Three things pin the current engine floor:
 
-    1. The build **commits** — before the fix, ``_build_graph`` relied on
-       ``from_blueprint(save=True)``, which only honours the blueprint's
-       ``output`` key (we have none), so the graph dir was left with bare
-       uncommitted segment files and nothing to cache.
+    1. ``from_blueprint(save=True, storage="disk", path=...)`` commits even
+       though the blueprint has no ``output`` key (fixed in kglite 0.15.2).
     2. The probe then reports a cache hit.
-    3. The reopen never raises. Today it returns ``None`` (the zero-row disk
-       defect in CHANGELOG "Known issues" makes the directory unreadable) and
-       the wrapper rebuilds; once the engine fix ships it returns the graph and
-       the cache starts hitting — with no change needed here.
-
-    Deliberately written to accept both arms, and to *verify* the good arm
-    rather than wave it through: if a graph comes back, its node count must
-    match what was built. That makes this the test that will notice the engine
-    fix landing, instead of silently continuing to exercise the fallback.
+    3. The zero-row node types in the SEC blueprint survive reopen (fixed in
+       kglite 0.15.1) with the same node count.
     """
     import gc
 
@@ -245,9 +235,6 @@ def test_disk_build_commits_and_reopen_never_raises(tmp_path: Path) -> None:
         warnings.simplefilter("always")
         reopened = _load_cached_graph(tmp_path, "disk")
 
-    if reopened is None:
-        assert any(issubclass(w.category, StaleGraphCacheWarning) for w in caught), (
-            "a cache miss caused by an unreadable cache must be surfaced as a warning"
-        )
-    else:
-        assert reopened.graph_info().get("node_count") == built_nodes
+    assert reopened is not None, "kglite 0.15.6 must reopen an SEC disk graph containing empty node types"
+    assert not caught, f"a healthy floor-version cache emitted warnings: {[str(w.message) for w in caught]}"
+    assert reopened.graph_info().get("node_count") == built_nodes

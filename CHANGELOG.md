@@ -4,7 +4,30 @@ All notable changes to kglite-datasets are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project adheres to
 semantic versioning (workspace version in the root `Cargo.toml`).
 
-## [Unreleased]
+## [0.1.2] - 2026-08-06
+
+### Fixed
+
+- `make develop` now explicitly targets the repository's `.venv`; an unrelated
+  activated virtual environment can no longer make maturin install the editable
+  wheel elsewhere while the target reports success.
+- SEC unit tests now use atomically unique `tempfile` directories instead of
+  clock-derived names. Parallel tests could collide on macOS and remove a
+  shared workdir during `ensure_dirs`, intermittently failing the release gate
+  with `Invalid argument`.
+
+### Changed
+
+- Raised the Python runtime dependency floor from `kglite>=0.13` to
+  `kglite>=0.15.6`. The development environment and CI matrix now use the same
+  range and continue to exercise the exact lower bound separately from the
+  newest matching release. The frozen SEC graph topology and save/reload
+  round-trip remain unchanged under kglite 0.15.6. Disk blueprint builds now
+  rely directly on the repaired `from_blueprint(save=True, path=...)` contract,
+  and the regression gate requires SEC's empty node types to reopen instead of
+  accepting the pre-0.15.1 rebuild fallback. New offline boundary tests cover
+  Sodir's disk blueprint save/reload and Wikidata's memory ingestion plus disk
+  save/reload from a tiny N-Triples fixture.
 
 ## [0.1.1] - 2026-07-28
 

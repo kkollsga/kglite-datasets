@@ -227,23 +227,21 @@ mod tests {
     #[test]
     fn ensure_dirs_idempotent() {
         let tmp = tempdir();
-        let w = Workdir::new(&tmp);
+        let w = Workdir::new(tmp.path());
         w.ensure_dirs(Some(StorageMode::Mapped)).unwrap();
         w.ensure_dirs(Some(StorageMode::Mapped)).unwrap(); // idempotent
         assert!(w.raw_index_dir().is_dir());
         assert!(w.processed_dir().is_dir());
         assert!(w.graph_dir(StorageMode::Mapped).is_dir());
-        std::fs::remove_dir_all(&tmp).ok();
     }
 
     #[test]
     fn graph_exists_false_for_empty_workdir() {
         let tmp = tempdir();
-        let w = Workdir::new(&tmp);
+        let w = Workdir::new(tmp.path());
         assert!(!w.graph_exists(StorageMode::Memory));
         assert!(!w.graph_exists(StorageMode::Mapped));
         assert!(!w.graph_exists(StorageMode::Disk));
-        std::fs::remove_dir_all(&tmp).ok();
     }
 
     /// Regression: the disk probe looked for `graph_manifest.json`, a name
@@ -254,7 +252,7 @@ mod tests {
     #[test]
     fn disk_graph_exists_tracks_kglite_commit_markers() {
         let tmp = tempdir();
-        let w = Workdir::new(&tmp);
+        let w = Workdir::new(tmp.path());
         let dir = w.graph_dir(StorageMode::Disk);
         std::fs::create_dir_all(&dir).unwrap();
         assert!(
@@ -289,21 +287,13 @@ mod tests {
         std::fs::write(gen_dir.join("disk_graph_meta.json"), b"{}").unwrap();
         assert!(w.graph_exists(StorageMode::Disk), "generation layout");
         assert_eq!(w.disk_graph_marker(), Some(dir.join("CURRENT")));
-
-        std::fs::remove_dir_all(&tmp).ok();
     }
 
-    /// Create an isolated tempdir under the OS temp directory.
-    fn tempdir() -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "kglite-sec-test-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
+    /// Atomically unique tempdir: layout tests execute in parallel.
+    fn tempdir() -> tempfile::TempDir {
+        tempfile::Builder::new()
+            .prefix("kglite-sec-test-")
+            .tempdir()
+            .unwrap()
     }
 }
