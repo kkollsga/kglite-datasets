@@ -235,6 +235,44 @@ def test_disk_build_commits_and_reopens(tmp_path: Path) -> None:
         warnings.simplefilter("always")
         reopened = _load_cached_graph(tmp_path, "disk")
 
-    assert reopened is not None, "kglite 0.15.6 must reopen an SEC disk graph containing empty node types"
+    assert reopened is not None, "the declared kglite floor must reopen an SEC disk graph containing empty node types"
     assert not caught, f"a healthy floor-version cache emitted warnings: {[str(w.message) for w in caught]}"
     assert reopened.graph_info().get("node_count") == built_nodes
+
+
+def test_mapped_build_reopens_mapped(tmp_path: Path) -> None:
+    """Build SEC ``mode="mapped"`` for real, then reopen it the way the wrapper
+    does, and pin that the reopened graph is *still mapped*.
+
+    The wrapper has always built and saved this mode with ``storage="mapped"``,
+    but before kglite 0.15.8 a saved ``.kgl`` recorded no storage mode, so
+    ``_load_cached_graph`` handed back a **memory** graph — every call after the
+    one that built the workdir quietly ignored the mode the caller asked for.
+    Nothing caught it because the reopened graph is otherwise identical, so the
+    regression is invisible to a topology digest; only ``storage_mode`` shows
+    it. That is why this asserts the mode and not just the node count.
+    """
+    import gc
+
+    from kglite_datasets.sec.wrapper import _build_graph, _load_cached_graph
+    from kglite_datasets.tests.synth_sec import write_synth_raw
+
+    write_synth_raw(tmp_path)
+    _sec_internal.extract_all_py(str(tmp_path), force=True)
+
+    g = _build_graph(tmp_path, "mapped", verbose=False)
+    built_nodes = g.graph_info().get("node_count")
+    assert built_nodes and built_nodes > 0
+    del g
+    gc.collect()
+
+    assert _sec_internal.graph_exists(str(tmp_path), "mapped"), "probe must see the saved build"
+
+    reopened = _load_cached_graph(tmp_path, "mapped")
+    assert reopened is not None, "the declared kglite floor must reopen a saved mapped SEC graph"
+    assert reopened.graph_info().get("node_count") == built_nodes
+    assert reopened.graph_info().get("storage_mode") == "mapped", (
+        "a mapped-saved cache must reopen mapped; `None` means the engine predates the "
+        "recorded storage mode (the key is absent before kglite 0.15.8, which reopened "
+        "such a graph as memory), and 'memory' means it recorded the mode but dropped it"
+    )

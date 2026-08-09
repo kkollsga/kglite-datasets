@@ -4,6 +4,24 @@ All notable changes to kglite-datasets are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project adheres to
 semantic versioning (workspace version in the root `Cargo.toml`).
 
+## [Unreleased]
+
+### Changed
+
+- Raised the Python runtime, development, and CI floor from `kglite>=0.15.6`
+  to `kglite>=0.15.8`. Loader-facing APIs and frozen graph topology are
+  unchanged — the golden digests hold across the bump.
+- `dataset(mode="mapped")` now actually returns a memory-mapped graph on a
+  cache hit. The wrapper always built and saved that mode's `.kgl` as mapped,
+  but a saved graph carried no record of its storage mode, so reopening the
+  cache silently handed back a memory graph; only the first (building) call in
+  a workdir's life was really mapped. kglite 0.15.8 records the mode in the
+  `.kgl` and honours it on load, so the cached open now matches the requested
+  mode. `graph_info()` gained a `storage_mode` key (`"memory"` / `"mapped"` /
+  `"disk"`) to confirm which backend an open landed on. This is the reason the
+  floor moves to 0.15.8 rather than 0.15.7: on any earlier engine the mapped
+  cache path cannot honour its own contract.
+
 ## [0.1.2] - 2026-08-06
 
 ### Fixed

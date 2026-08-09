@@ -30,7 +30,7 @@ MATURIN   := $(VENV)/bin/maturin
 # Dev toolchain. `kglite` is the runtime engine dependency (see pyproject
 # `dependencies`); the rest are what the gate itself needs. Keep in sync with
 # the CI workflow's install steps.
-DEV_DEPS  := maturin pytest ruff "kglite>=0.15.6"
+DEV_DEPS  := maturin pytest ruff "kglite>=0.15.8"
 # Every Python path ruff owns. One list, referenced by check and format alike,
 # so the two can never drift apart and silently stop covering a directory.
 PY_PATHS  := kglite_datasets benchmarks
