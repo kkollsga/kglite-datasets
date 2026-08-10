@@ -12,7 +12,7 @@
 //! at the composition seam — the PyO3 wrapper and the parity/bench tests).
 //!
 //! Extracted from `kglite::datasets` (kglite ≤ 0.13.x). Public surface
-//! mirrors `kglite::api::datasets`; see `dev-docs/plans/dataset-loader-extraction.md`.
+//! mirrors `kglite::api::datasets` — see the migration table below.
 //!
 //! ## Public API / migration parity
 //!
