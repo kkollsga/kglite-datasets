@@ -247,7 +247,7 @@ into their own crate + wheel so the kglite engine links zero network code.
     min 3.252 ms on Apple M4).
   kglite removed its in-tree loaders on 2026-07-16, so these frozen digests +
   baseline are now the sole oracles carrying the verified-correct authority
-  forward. See `dev-docs/plans/dataset-loader-extraction.md`.
+  forward.
 
 ### Compatibility
 

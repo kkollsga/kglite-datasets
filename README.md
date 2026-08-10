@@ -60,7 +60,7 @@ copy → prove parity → freeze goldens + bench baseline (while kglite still ha
 in-tree copy) → kglite removed its loaders (2026-07-16). With the in-tree copy
 gone, the frozen goldens (`tests/goldens/`) and the frozen bench baseline
 (`benchmarks/baseline.json`) are the sole oracles carrying that verified-correct
-authority forward. See `dev-docs/plans/dataset-loader-extraction.md`.
+authority forward.
 
 ## Development
 
