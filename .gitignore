@@ -30,6 +30,17 @@
 # committed — mirrors kglite's .gitignore).
 /.claude/
 
+# Same reason as /.claude/ above: the Codex mirror is workstation-local
+# agent state, and was neither tracked nor ignored — so a stray `git add -A`
+# could have committed it while its Claude twin stayed out.
+/.agents/
+
+# The Codex adapter of CLAUDE.md — generated from it (title + `CLAUDE.md` →
+# `AGENTS.md` + `.claude/skills/` → `.agents/skills/`; the Authority block is
+# exempt from the substitution), so it shares `/.agents/`'s status rather than
+# being a second tracked copy every conventions edit has to touch.
+/AGENTS.md
+
 # Python virtualenvs / caches
 /.venv/
 /.venv*/
