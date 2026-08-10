@@ -1,5 +1,11 @@
 # kglite-datasets — Claude Code Conventions
 
+**Authority:** `CLAUDE.md` + `.claude/skills/` are the authority this repo's
+agent instructions are regenerated from; `AGENTS.md` and `.agents/skills/` are
+generated adapters (identical modulo the `CLAUDE.md` → `AGENTS.md`
+substitution). Edit the authority and regenerate in the same action — never
+edit an adapter alone.
+
 Fetch-and-extract dataset loaders for [kglite](../kglite) — wrappers that pull a
 public source (SEC EDGAR, Wikidata, Sodir / Norwegian Offshore Directorate, …)
 and **emit** it to disk (CSV / blueprint JSON / dump), cached under a workdir.
@@ -33,6 +39,13 @@ determinism/bench-smoke describe steps). `make pytest` + `make bench` need
 `make develop` + a kglite wheel in `.venv`. Keep this list in sync with the
 `Makefile`.
 
+In flight, gate on what the change could break — the touched surface plus its
+direct consumers — not on the whole repo. The full battery (`make gate` +
+`make test` + `make pytest`) runs **twice**: once before a long-lived branch's
+first push, and once at a program's completion over the union of everything the
+phases touched. The checks a fast target skips don't disappear; they come back
+as a red first CI run, one cycle per blocker.
+
 **A gate may never silently no-op.** If a target's tool is missing it must
 fail with the fix printed, never skip with a notice — and the tool must be in
 `DEV_DEPS` (`make venv`) so it is actually present. `ruff` was in the Makefile
@@ -40,6 +53,21 @@ from day one behind a `command -v ruff || skip` guard and was never installed
 by anyone, so the Python lint gate ran zero times and accumulated 42 findings
 while reporting success. Same rule for tests: see **Datasets discipline** on
 skip accounting.
+
+**A reported status is not the result.** Each of these also failed in the
+*reassuring* direction:
+
+- **A pipeline reports its LAST stage's status.** `cmd … | tail` says 0 for a
+  `cmd` that exited 101. Read `$?` from the command itself, or `set -o
+  pipefail`.
+- **`git add a b c` with one bad pathspec stages nothing.** The add exits
+  non-zero and the next commit takes the previous index, looking normal. Read
+  `git status --porcelain` after staging.
+- **`grep -c` exits 1 on a count of zero**, so `… | grep -c X && …` breaks the
+  chain on the legitimate empty case and an `||` fallback reports the opposite
+  of the truth. Capture the count; don't gate on grep's status.
+- **A backgrounded command's result lives in its output artifact**, never in
+  the launcher's exit echo — that only says the job *started*.
 
 ## Working style
 
@@ -69,6 +97,33 @@ Each pass through a file should leave it more compartmentalised than you found i
   concerns. Prefer small named strategy fns over long if/else chains.
 - Fixing a bug — scan for the *class* of bug across the other loaders; the
   reported symptom is rarely the only instance.
+
+## Code review — report what is broken, not what you would have written
+
+**A finding names a concrete failure**: the input or state, and the wrong
+outcome it produces — a wrong graph, a crash, data loss, a broken contract with
+a caller or a persisted file, a *measured* performance regression, a gate that
+cannot fail, a claim the code contradicts. **"No findings" is a valid review**,
+and a good one.
+
+**Design, structure, naming, "consider using X", "this won't scale" are not
+findings at review — they are mis-staged.** Their venue is planning: the
+`phased-plan` investigation and plan approval is where "I would have designed
+this differently" is invited, argued and settled, before the code exists. After
+approval, review measures the implementation against *that plan* and against
+correctness, never against the reviewer's alternative design. A design opinion
+formed mid-diff is input to the *next* plan.
+
+**A finding that cannot state its failure case is removed, not downgraded.**
+Severity labels are the laundering mechanism: "minor: consider extracting this"
+is a preference wearing a label.
+
+**One narrow exception:** citing a rule this project declared *before* the diff
+existed — the network-free test rule, the skip-accounting rule, the
+golden-fixture requirement, the ~80-line factoring ceiling — naming both the
+rule and the violating line. That is enforcement, not taste. A review tool's
+effort/confidence level is orthogonal: a higher level buys more *speculative
+bugs*, never permission to report preferences.
 
 ## Datasets discipline
 
@@ -106,6 +161,20 @@ watch **built-graph size** (node/edge counts + on-disk bytes): a size regression
 on a bundled dataset is a real regression. Record rows in
 `dev-docs/bench/results/results.csv`. See `dev-docs/bench/README.md`.
 
+The `min` rule is for a **steady-state repeated** op only. A *once-per-event*
+cost — a cold extract, the first build of a dataset, first-call init — has no
+steady state, and its `min` is a warm-cache run no user ever sees; report the
+**mean of first events** across fresh instances. Likewise for a heavy-tailed
+cell whose `min` sits far below its own median: judge it by median/mean,
+because `min` is measuring the lucky run.
+Every comparison carries an **unchanged-path control cell** — a loader the
+change didn't touch. If the control regressed too, you measured the machine
+(thermals, background load, cold caches right after a build), not the code; no
+control cell, no verdict. And measure the headline quantity **two independent
+ways** (wall clock around the call vs the harness's own timer; node/edge counts
+vs bytes on disk) — the routes diverge exactly when the instrument is broken,
+which a single route reports as a clean result.
+
 ## Inbox hygiene
 
 `inbox/unread/` (at the repo root) holds incoming feedback/bug/coordination
@@ -135,9 +204,10 @@ hand-edit the inbox.
   `Cargo.toml` — all crates inherit via `version.workspace = true`. **One version
   bump per push** to `main`; fold follow-up work into the same `[x.y.z]` block if
   a release is already staged.
-- Shipping is the **`release`** skill's job — it's the only thing that bumps the
-  version and pushes `main` (which triggers the crates.io + PyPI publish). No
-  other flow touches the version or CHANGELOG version block.
+- Shipping is the **`release`** skill's job — it is the only thing that bumps
+  the version, and the only thing that pushes the `v<x.y.z>` tag, which is what
+  triggers the crates.io + PyPI publish (pushing `main` runs CI only). No other
+  flow touches the version or the CHANGELOG version block.
 - Co-author trailer on commits per the harness convention.
 
 ## The dev-docs / inbox / skills system
