@@ -36,6 +36,32 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 
 ### Fixed
 
+- **Three gates on the publish path could not fail.** Reported by kglite
+  (2026-07-28) and unaddressed until now; all three were still live.
+  `release.yml`'s version probe was `grep -m 1 '^version' Cargo.toml | cut …`,
+  which reports *cut's* status — always 0. A manifest the grep missed yielded
+  an empty `VERSION`, the step still succeeded, and that value drives the
+  publish decision: the crates.io probe would query a malformed URL, get a
+  non-404, take the "already published" branch, and the workflow would report
+  **green having published nothing**. The version is now asserted to look like
+  one before it reaches `$GITHUB_OUTPUT`, and a tag that disagrees with the
+  manifest is refused outright — a crates.io publish is permanent.
+
+  Both artifact uploads lacked `if-no-files-found`, whose default is `warn`: a
+  build job that exits 0 having produced no wheel uploads an *empty artifact*
+  and stays green, and because the PyPI publish runs `skip-existing: true`, a
+  partial wheel set would ship with nothing saying so. Both now use
+  `if-no-files-found: error`.
+
+  The `publish-pypi` job's `ls -la dist` was a report, not a gate — the flow
+  verified the published *version* and never the artifact *set*. It now counts
+  and asserts 5 wheels + 1 sdist before publishing.
+
+  Each fix was verified by breaking what it guards and watching it go red — a
+  version-less manifest, a mismatched tag, a 4-wheel set, a dropped sdist, an
+  empty `dist/` — because the reporter's own first attempt at this class was
+  itself vacuous and looked correct on reading.
+
 - The built-graph golden (GATE #3) froze the engine's ordering policy rather
   than the graph's shape. Its id sample was taken with an engine-side
   `ORDER BY n.id LIMIT 25` over the mixed-type `id` column, so kglite 0.16.1's
