@@ -11,11 +11,21 @@ So this gate freezes the shape of the graph the user actually receives, and
 exercises the create-then-reopen path the SEC wrapper depends on
 (``_build_graph`` -> ``save`` -> ``_load_cached_graph``).
 
-Verified identical across kglite 0.13.0, 0.14.5, 0.15.0, 0.15.6, 0.15.7, and
-0.15.8 (last checked 2026-08-09) — the digest is engine-version-stable by
-construction: it covers node/edge topology, not serialization bytes. The
-``.kgl`` file *size* deliberately is **not** asserted; it legitimately changed
-between 0.13 and 0.14 (153457 -> 149087 bytes) with identical graph content.
+Verified identical across kglite 0.13.0, 0.14.5, 0.15.0, 0.15.6, 0.15.7,
+0.15.8, and 0.16.5 (last checked 2026-08-20) — the digest is
+engine-version-stable by construction: it covers node/edge topology, not
+serialization bytes. The ``.kgl`` file *size* deliberately is **not** asserted;
+it legitimately changed between 0.13 and 0.14 (153457 -> 149087 bytes) with
+identical graph content.
+
+One thing was *not* stable by construction until the 0.16.5 bump: the id
+sample used an engine-side ``ORDER BY n.id LIMIT 25``. ``n.id`` is mixed-type
+here, and kglite 0.16.1 replaced an intransitive cross-type comparator with a
+documented total order, which moved the sample while the graph itself stayed
+byte-identical (same 14494 nodes, same 13887 edges, same id/label and
+(src, type, tgt) sets). The sample is now sliced after the same client-side
+sort the other parts use, so it is the graph's shape being frozen rather than
+the engine's ordering policy — the digest is identical on 0.15.8 and 0.16.5.
 
 Offline: no network.
 """
@@ -26,6 +36,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import tempfile
 
 import pytest
 
@@ -51,7 +62,14 @@ def _fingerprint(g) -> str:
     parts = [
         rows("MATCH (n) RETURN labels(n) AS l, count(*) AS c"),
         rows("MATCH ()-[r]->() RETURN type(r) AS t, count(*) AS c"),
-        g.cypher("MATCH (n) RETURN n.id AS id, labels(n) AS l ORDER BY id LIMIT 25").to_list(),
+        # The id sample is sliced *after* the client-side sort, never by an
+        # engine-side `ORDER BY id LIMIT 25`: `n.id` is a mixed-type column
+        # here (integer CIKs for Company/SicCode, strings for Filing/Day/Month)
+        # and cross-type ordering is an engine policy, not a property of our
+        # graph. Ordering it engine-side made this gate fail on a kglite
+        # upgrade that changed nothing about the graph we build — see the
+        # module docstring.
+        rows("MATCH (n) RETURN n.id AS id, labels(n) AS l")[:25],
     ]
     return json.dumps(parts, sort_keys=True, default=str)
 
@@ -119,3 +137,30 @@ def test_save_reload_round_trip(tmp_path: Path) -> None:
 
     reloaded = kglite.load(str(kgl))
     assert _fingerprint(reloaded) == before, "graph changed across save -> load round trip"
+
+
+def test_mixed_type_id_ordering_is_whole_and_consistent() -> None:
+    """Floor guard: ``ORDER BY n.id LIMIT k`` on our graph returns ``k`` rows.
+
+    The SEC graph we ship has a **mixed-type** ``id`` column — integer CIKs on
+    ``Company``/``SicCode``, strings on ``Filing``/``Day``/``Month``. Below
+    kglite 0.16.1 the fused top-K path compared such a key with an intransitive
+    comparator that reported "equal" for any cross-type pair, so it silently
+    dropped candidates: on this graph ``ORDER BY id LIMIT 25`` returned **4**
+    rows, disagreed with the unlimited ordering, and ``min(n.id)`` answered a
+    different value again. That is a defect in the graph our users receive, not
+    in a query we run, which is why the floor moves to 0.16.5.
+
+    Fails on kglite <= 0.15.8, passes from 0.16.1 — a real floor guard, not a
+    tautology.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        g = _build_memory_graph(Path(td))
+        full = [r["id"] for r in g.cypher("MATCH (n) RETURN n.id AS id ORDER BY id").to_list()]
+        top = [r["id"] for r in g.cypher("MATCH (n) RETURN n.id AS id ORDER BY id LIMIT 25").to_list()]
+
+    assert len({type(i).__name__ for i in full}) > 1, (
+        "guard is only meaningful while n.id is mixed-type; the graph changed"
+    )
+    assert len(top) == 25, f"LIMIT 25 returned {len(top)} rows over a mixed-type sort key"
+    assert top == full[:25], "fused ORDER BY ... LIMIT disagrees with the unlimited ordering"

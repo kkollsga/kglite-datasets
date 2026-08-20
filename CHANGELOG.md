@@ -4,6 +4,49 @@ All notable changes to kglite-datasets are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project adheres to
 semantic versioning (workspace version in the root `Cargo.toml`).
 
+## [Unreleased]
+
+### Changed
+
+- Raised the Python runtime, development, and CI floor from `kglite>=0.15.8`
+  to `kglite>=0.16.5`. **Loader-facing APIs and the graph we build are
+  unchanged** — the SEC build was verified byte-identical across the bump
+  (same 14494 nodes, 13887 edges, and the same node id/label and
+  `(src, type, tgt)` edge sets).
+
+  The floor moves to 0.16.5 specifically, not merely to track latest. Every
+  graph this project ships has a **mixed-type `id` column** — integer CIKs on
+  `Company`/`SicCode`, strings on `Filing`/`Day`/`Month` — and below kglite
+  0.16.1 the fused `ORDER BY ... LIMIT` top-K path compared such a key with an
+  intransitive comparator that reported "equal" for every cross-type pair. On
+  the bundled SEC graph that silently dropped rows a caller asked for:
+  `MATCH (n) RETURN n.id AS id ORDER BY id LIMIT 25` returned **4** rows, not
+  25, disagreed with the same query without `LIMIT`, and `min(n.id)` answered
+  a third value. Nothing warned. 0.16.1 replaced the comparator with one
+  documented total order shared by `ORDER BY`, the fused top-K, window frames,
+  `min()`/`max()` and the fluent `sort=`, so the query is now whole and
+  self-consistent. `test_mixed_type_id_ordering_is_whole_and_consistent` pins
+  it; verified failing on 0.15.8 and passing on 0.16.5, so it guards the floor
+  rather than restating it.
+
+  Also inherited from the range: a disk-mode graph saved after a
+  delete-then-create could not be loaded again (`save()` reported success and
+  the next `load()` refused the whole graph), which the `mode="disk"` build
+  path is exposed to.
+
+### Fixed
+
+- The built-graph golden (GATE #3) froze the engine's ordering policy rather
+  than the graph's shape. Its id sample was taken with an engine-side
+  `ORDER BY n.id LIMIT 25` over the mixed-type `id` column, so kglite 0.16.1's
+  corrected cross-type ordering drifted the digest even though the graph was
+  byte-identical — and, worse, the pre-0.16.1 value it had been frozen against
+  was the broken comparator's output, only 4 of the 25 requested rows. The
+  sample is now sliced after the same client-side sort the other two parts
+  already used, which the module docstring had stated as the rule. The digest
+  is now identical on 0.15.8 and 0.16.5; it was re-frozen once, in this
+  change, to the stable value.
+
 ## [0.1.3] - 2026-08-10
 
 ### Changed
