@@ -38,7 +38,24 @@ jobs:
         id: check
         run: |
           # Version is single-sourced in [workspace.package] (root Cargo.toml).
+          # `grep … | cut` reports *cut's* status, which is always 0 — a grep
+          # that matches nothing yields an empty VERSION and the step still
+          # succeeds. That value drives the publish decision: empty means the
+          # probe below queries a malformed URL, gets a non-404, and the
+          # workflow reports green having published nothing. Assert the shape
+          # before it reaches $GITHUB_OUTPUT. (kglite, 2026-07-28.)
           VERSION=$(grep -m 1 '^version' Cargo.toml | cut -d '"' -f 2)
+          if ! printf '%s\n' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+'; then
+            echo "::error::could not read a version from Cargo.toml (got '$VERSION')"
+            exit 1
+          fi
+          # The tag is what triggered this run; a tag that disagrees with the
+          # manifest would publish a version nobody asked for, and a crates.io
+          # publish is permanent.
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ] && [ "${GITHUB_REF_NAME:-}" != "v$VERSION" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match Cargo.toml version $VERSION"
+            exit 1
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           # HTTP 404 is the only "publish" signal — 200 means already there,
           # anything else (403 rate-limit, 5xx) means "can't tell → skip safely".
@@ -101,6 +118,11 @@ jobs:
         with:
           name: wheels-${{ matrix.os }}-${{ matrix.target }}
           path: dist/*.whl
+          # Default is `warn`: a build job that exits 0 having produced no
+          # wheel would upload an empty artifact and stay green, and the PyPI
+          # publish runs with `skip-existing: true`, so a partial wheel set
+          # would ship with nothing saying so.
+          if-no-files-found: error
 
   build-sdist:
     name: Build sdist
@@ -119,6 +141,7 @@ jobs:
         with:
           name: sdist
           path: dist/*.tar.gz
+          if-no-files-found: error
 
   publish-pypi:
     name: Publish to PyPI
@@ -142,8 +165,24 @@ jobs:
         with:
           name: sdist
           path: dist
-      - name: List artifacts
-        run: ls -la dist
+      - name: List artifacts and assert the set is complete
+        run: |
+          ls -la dist
+          # `ls` alone is a report, not a gate. The publish step below verifies
+          # nothing about the artifact *set* — `skip-existing: true` means an
+          # incomplete upload publishes quietly. Count, then assert.
+          WHEELS=$(find dist -name '*.whl' -type f | wc -l | tr -d ' ')
+          SDISTS=$(find dist -name '*.tar.gz' -type f | wc -l | tr -d ' ')
+          echo "found $WHEELS wheels, $SDISTS sdist(s)"
+          # One per build-wheels matrix entry; keep in sync with that matrix.
+          if [ "$WHEELS" -ne 5 ]; then
+            echo "::error::expected 5 wheels (one per matrix target), found $WHEELS"
+            exit 1
+          fi
+          if [ "$SDISTS" -ne 1 ]; then
+            echo "::error::expected exactly 1 sdist, found $SDISTS"
+            exit 1
+          fi
       - name: Publish to PyPI (trusted publishing)
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
