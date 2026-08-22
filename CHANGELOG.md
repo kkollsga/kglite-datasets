@@ -4,6 +4,23 @@ All notable changes to kglite-datasets are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project adheres to
 semantic versioning (workspace version in the root `Cargo.toml`).
 
+## [Unreleased]
+
+### Changed
+
+- Raised the Python runtime, development, and CI floor from `kglite>=0.16.5`
+  to `kglite>=0.16.6` (both matrix legs move in lockstep, so the floor leg
+  tests the engine it claims to). 0.16.6 carries upstream silent-wrong-answer
+  fixes — var-length reachability on cyclic graphs, `IN [list]` duplicate
+  over-counting, fused `avg()` on mixed-type columns, `=~` anchored to the
+  full string per openCypher, disk-mode string `SET` loss on save — none of
+  which touch a query this crate issues (swept: no var-length Cypher, no
+  `=~`, no `avg()`, `IN` lists duplicate-free), but all of which can affect
+  the graphs users build on an older engine. The built SEC graph is
+  unchanged: the frozen topology digest is identical on 0.16.5 and 0.16.6
+  (0.16.6's per-section `.kgl` CRCs change serialization bytes only, which
+  the digest deliberately does not cover).
+
 ## [0.1.4] - 2026-08-20
 
 ### Changed
