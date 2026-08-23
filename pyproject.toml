@@ -34,7 +34,7 @@ dynamic = ["version"]
 # the exact floor as well as the newest release satisfying the range, so the
 # lower bound cannot silently rot.
 dependencies = [
-    "kglite>=0.16.6",
+    "kglite>=0.16.7",
 ]
 
 [project.optional-dependencies]

@@ -4,6 +4,23 @@ All notable changes to kglite-datasets are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project adheres to
 semantic versioning (workspace version in the root `Cargo.toml`).
 
+## [Unreleased]
+
+### Changed
+
+- Raised the Python runtime, development, and CI floor from `kglite>=0.16.6`
+  to `kglite>=0.16.7` (both matrix legs move in lockstep, so the floor leg
+  tests the engine it claims to). 0.16.7 is a behavior-change release, not a
+  correctness-fix one; the upgrade checklist was swept against this crate:
+  no use of `as_dict` (removed from the centrality methods), no networkx
+  route in any loader, nothing reads `schema()`/describe() type strings (so
+  the new `"mixed"` batch type is moot), and no calls to `degrees()` /
+  one-arg `embeddings()` / `to_networkx()` (whose new title/id-collision
+  raises therefore can't fire here — though downstream callers building our
+  Wikidata output should note `to_networkx(node_key="type_id")` as the
+  escape hatch). Golden topology digest verified identical on 0.16.6 and
+  0.16.7; full offline suite green on 0.16.7.
+
 ## [0.1.5] - 2026-08-22
 
 ### Changed
