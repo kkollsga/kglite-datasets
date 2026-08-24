@@ -4,6 +4,29 @@ All notable changes to kglite-datasets are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project adheres to
 semantic versioning (workspace version in the root `Cargo.toml`).
 
+## [Unreleased]
+
+### Changed
+
+- Raised the Python runtime, development, and CI floor from `kglite>=0.16.7`
+  to `kglite>=0.16.9` (both matrix legs move in lockstep, so the floor leg
+  tests the engine it claims to). The floor moves for user-facing engine
+  fixes our default paths sit on: the SEC wrapper defaults to
+  `mode="mapped"`, and 0.16.8 fixes two mapped-mode silent-wrong-answer bugs
+  (a stale lazy property index serving overwritten values to `MATCH`, and
+  `load_ntriples` nulling `n.id` across a node type on one unparseable
+  subject); 0.16.9 recovers the 0.16.6 `.kgl` load-time regression (~1.6x on
+  digest-carrying files), which our memory/mapped reopen path pays on every
+  cached open. Swept both releases' changed surfaces against this crate: no
+  use of `add_connections_internal` (removed from the Python class), nothing
+  reads `graph_info()['format_version']` (now reports the real container
+  version), no composite indexes (canonical name is now property-sorted), no
+  spatial fluent calls, and no query this crate issues hits the
+  `count(DISTINCT rel)` / aggregating `WITH ... LIMIT` / JSON-`UNWIND`
+  fixes. `.kgl` bytes are unchanged in both directions; golden topology
+  digest verified identical on 0.16.7 and 0.16.9; full offline suite green
+  on 0.16.9.
+
 ## [0.1.6] - 2026-08-23
 
 ### Changed
