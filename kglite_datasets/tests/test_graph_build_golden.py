@@ -12,7 +12,8 @@ exercises the create-then-reopen path the SEC wrapper depends on
 (``_build_graph`` -> ``save`` -> ``_load_cached_graph``).
 
 Verified identical across kglite 0.13.0, 0.14.5, 0.15.0, 0.15.6, 0.15.7,
-0.15.8, 0.16.5, 0.16.6, 0.16.7, and 0.16.9 (last checked 2026-08-24) — the digest is
+0.15.8, 0.16.5, 0.16.6, 0.16.7, 0.16.9, and 0.16.12 (last checked 2026-08-26) —
+the digest is
 engine-version-stable by construction: it covers node/edge topology, not
 serialization bytes. The ``.kgl`` file *size* deliberately is **not** asserted;
 it legitimately changed between 0.13 and 0.14 (153457 -> 149087 bytes) with
@@ -26,8 +27,8 @@ byte-identical (same 14494 nodes, same 13887 edges, same id/label and
 (src, type, tgt) sets). The sample is now sliced after the same client-side
 sort the other parts use, so it is the graph's shape being frozen rather than
 the engine's ordering policy — the digest is identical on 0.15.8, 0.16.5,
-0.16.6, 0.16.7, and 0.16.9 (0.16.6's per-section ``.kgl`` CRCs change bytes,
-not topology).
+0.16.6, 0.16.7, 0.16.9, and 0.16.12 (0.16.6's per-section ``.kgl`` CRCs change
+bytes, not topology).
 
 Offline: no network.
 """

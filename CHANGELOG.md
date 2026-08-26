@@ -4,6 +4,31 @@ All notable changes to kglite-datasets are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project adheres to
 semantic versioning (workspace version in the root `Cargo.toml`).
 
+## [Unreleased]
+
+### Changed
+
+- Raised the Python runtime, development, and CI floor from `kglite>=0.16.9`
+  to `kglite>=0.16.12` (both matrix legs move in lockstep, so the floor leg
+  tests the engine it claims to). The floor moves to keep the supported
+  baseline on the current engine and for one improvement our default path
+  sits on: 0.16.10 makes a mapped graph's first property probe answer from
+  the store map instead of walking the node list — the SEC wrapper defaults
+  to `mode="mapped"`, so its first filtered `MATCH` after a cached open pays
+  this. Swept all three releases' (0.16.10–0.16.12) changed surfaces against
+  this crate: the wrappers issue no Cypher, so the `LIMIT`-on-aggregate
+  row-drop, `vector_score` cache-collision, and `size()`-on-bracketed-string
+  fixes don't touch our build paths; no fluent condition dicts, no
+  `define_schema`/`DROP CONSTRAINT`, no text/vector indexes, no secondary
+  labels (so the 0.16.11 `vacuum()` label-corruption fix has no path here),
+  and no use of the removed `_`-prefixed subgraph spikes. The Sodir
+  blueprint's `property_types` values (`validFrom`/`validTo`/`date`) are all
+  recognized type keywords, so 0.16.11's new unknown-value blueprint warning
+  stays silent; neither blueprint declares an ontology, so the 0.16.12
+  ontology gate is inert. Golden topology digest verified identical on
+  0.16.9 and 0.16.12; full offline suite green on 0.16.12 (26 passed, 13
+  accounted live skips).
+
 ## [0.1.7] - 2026-08-24
 
 ### Changed
