@@ -4,6 +4,25 @@ All notable changes to kglite-datasets are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project adheres to
 semantic versioning (workspace version in the root `Cargo.toml`).
 
+## [Unreleased]
+
+### Changed
+
+- Raised the Python runtime, development, and CI floor from `kglite>=0.16.12`
+  to `kglite>=0.16.13` (both matrix legs move in lockstep, so the floor leg
+  tests the engine it claims to). The floor moves to keep the supported
+  baseline on the current engine; 0.16.13 is ontology / label-alternation /
+  index-planner work, and the sweep found none of it on this crate's build
+  paths: the wrappers issue no Cypher (so the label-alternation fusions,
+  closure-probe fixes, `WHERE`-equality wrong-type pruning, and
+  `MERGE`-on-`name` fixes don't apply), neither blueprint declares indexes or
+  an ontology (so the `create_index`-on-`name` answer-change fix and every
+  `ontology_audit()` / `SHOW ONTOLOGY` column change are inert), no fluent
+  `where()` calls, and the `RelationshipDecl` Rust API addition is
+  irrelevant — this crate never links the kglite Rust crate. Golden topology
+  digest verified identical on 0.16.12 and 0.16.13; full offline suite green
+  on 0.16.13 (26 passed, 13 accounted live skips).
+
 ## [0.1.8] - 2026-08-26
 
 ### Changed
