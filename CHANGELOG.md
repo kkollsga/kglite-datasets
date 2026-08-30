@@ -4,7 +4,7 @@ All notable changes to kglite-datasets are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project adheres to
 semantic versioning (workspace version in the root `Cargo.toml`).
 
-## [Unreleased]
+## [0.1.10] - 2026-08-30
 
 ### Changed
 
