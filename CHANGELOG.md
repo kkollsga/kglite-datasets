@@ -4,6 +4,32 @@ All notable changes to kglite-datasets are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project adheres to
 semantic versioning (workspace version in the root `Cargo.toml`).
 
+## [Unreleased]
+
+### Changed
+
+- Raised the Python runtime, development, and CI floor from `kglite>=0.16.13`
+  to `kglite>=0.16.15` (both matrix legs move in lockstep, so the floor leg
+  tests the engine it claims to; `0.16.15` ships wheels for both runners).
+  The move crosses two engine releases, and the sweep found the one breaking
+  change inert here: 0.16.14's `max_rows` → `max_work_units` rename touches an
+  option this crate never passes (the wrappers issue no Cypher). Everything
+  else is additive or a fix on paths we already use bare: the new
+  `load(storage=, defer_index_rebuild=, max_load_mb=)` options don't change a
+  bare `load(path)` call, which is the only form `_cache.load_cached_graph`
+  and the SEC reopen use; our `storage=` arguments all go to
+  `from_blueprint` / `KnowledgeGraph`, which are unchanged. Genuine gains for
+  this crate's users: deterministic `.kgl` bytes across repeated saves
+  (0.16.14 sorts the persisted connectivity/index snapshots), the
+  reloaded-`.kgl` zero-edge-count repair, the concurrent-load spill-directory
+  collision fix (the ~1-in-600 `EEXIST`/`EINVAL` failure a downstream hit on
+  a small fixture), and 5–10% faster `.kgl` loads. Golden topology digest
+  verified identical on 0.16.13 and 0.16.15; full offline suite green on
+  0.16.15 (26 passed, 13 accounted live skips).
+- Refreshed the save/reload round-trip test's docstring for 0.16.15's
+  `storage=`-on-`load` semantics: `"memory"`/`"mapped"` are now an override
+  rather than an `ArgumentError`, `"disk"` is still refused structurally.
+
 ## [0.1.9] - 2026-08-27
 
 ### Changed
