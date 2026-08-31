@@ -20,6 +20,13 @@ repository = "https://github.com/kkollsga/kglite-datasets"
 # blueprint JSON / dump); the CSV→graph / ntriples→graph build is the
 # caller's job via kglite's `from_blueprint` / `load_ntriples`, so no
 # workspace member links the kglite crate.
+# Cap dependency debuginfo: a dep rlib's DWARF is the bulk of the debug
+# tree (kglite's 2026-08-31 compile-footprint review: rlib −43%, tree
+# −22%, measured). Workspace members keep full debug info — the `"*"`
+# wildcard doesn't reach them; dependency backtraces keep file/line.
+[profile.dev.package."*"]
+debug = "line-tables-only"
+
 [profile.release]
 lto = "thin"
 codegen-units = 1

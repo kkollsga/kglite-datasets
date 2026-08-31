@@ -8,6 +8,20 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 
 ### Changed
 
+- Raised the Python runtime, development, and CI floor from `kglite>=0.16.16`
+  to `kglite>=0.16.17` (both matrix legs move in lockstep; `0.16.17` ships
+  wheels for both runners). The release's whole delta is Rust-consumer-only —
+  the `geo` default-features trim and the debug-footprint recipe docs — and
+  this crate never links the kglite Rust crate, so nothing on our build paths
+  moves. Golden topology digest verified identical on 0.16.16 and 0.16.17;
+  full offline suite green on 0.16.17 (26 passed, 13 accounted live skips).
+- Adopted the dep-debuginfo cap from kglite's compile-footprint review
+  (`[profile.dev.package."*"] debug = "line-tables-only"` at the workspace
+  root, prompted by the 2026-08-31 estate disk-full incident): dependency
+  rlibs shed their DWARF bulk while workspace members keep full debug info
+  and dependency backtraces keep file/line. The review's other ask —
+  `--workspace` cargo invocations over per-package `-p` selections — was
+  already this repo's practice in every gate and CI step.
 - Raised the Python runtime, development, and CI floor from `kglite>=0.16.15`
   to `kglite>=0.16.16` (both matrix legs move in lockstep, so the floor leg
   tests the engine it claims to; `0.16.16` ships wheels for both runners).
