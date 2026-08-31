@@ -4,6 +4,21 @@ All notable changes to kglite-datasets are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project adheres to
 semantic versioning (workspace version in the root `Cargo.toml`).
 
+## [0.1.12] - 2026-08-31
+
+### Changed
+
+- Raised the Python runtime, development, and CI floor from `kglite>=0.16.17`
+  to `kglite>=0.16.18` (both matrix legs move in lockstep; `0.16.18` ships
+  wheels for both runners). The release's whole delta lives in
+  `kglite-mcp-server` and its peripherals — csv_http OS-assigned port binding,
+  non-fatal peripheral boot degradation (csv_http bind, per-entry
+  `source_root` resolution), the mcp-methods 0.4.7 pin — none of which this
+  crate's loaders invoke; the wrappers call the kglite Python API only, so
+  nothing on our build paths moves. Golden topology digest verified identical
+  on 0.16.17 and 0.16.18; full offline suite green on 0.16.18 (26 passed,
+  13 accounted live skips).
+
 ## [0.1.11] - 2026-08-31
 
 ### Changed
