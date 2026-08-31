@@ -4,6 +4,28 @@ All notable changes to kglite-datasets are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project adheres to
 semantic versioning (workspace version in the root `Cargo.toml`).
 
+## [Unreleased]
+
+### Changed
+
+- Raised the Python runtime, development, and CI floor from `kglite>=0.16.15`
+  to `kglite>=0.16.16` (both matrix legs move in lockstep, so the floor leg
+  tests the engine it claims to; `0.16.16` ships wheels for both runners).
+  The sweep found the entire release inert on this crate's build paths: the
+  one removal (`ResultView.diagnostics`' never-written `timed_out` key) is a
+  key this crate never reads, the GraphML `label` fix touches an export we
+  never call, the `describe()` loc/geo badge fix and the `id(n)` docs are
+  display/documentation, the deadline/Ctrl-C observance fixes live in query
+  paths the wrappers don't exercise (they issue no Cypher, set no deadlines),
+  and the `FilterCondition` facade export is Rust-only — this crate never
+  links the kglite Rust crate. Notably, two of the release's downstream
+  findings improve datasets *users*' experience directly: the `describe()`
+  badge on a both-loc-and-geo dataset (the Sodir shape — 37 of 38 types
+  declare both) now advertises the plain coordinate columns, and long path
+  queries over built graphs now honor their deadlines. Golden topology
+  digest verified identical on 0.16.15 and 0.16.16; full offline suite green
+  on 0.16.16 (26 passed, 13 accounted live skips).
+
 ## [0.1.10] - 2026-08-30
 
 ### Changed
