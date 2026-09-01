@@ -86,15 +86,15 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        # Both ends of the declared `kglite>=0.16.18` range. Testing only the
+        # Both ends of the declared `kglite>=0.16.19` range. Testing only the
         # latest engine leaves the floor unverified — it would rot silently
         # until a downstream that legitimately resolved an older kglite hit a
-        # break we never saw. `0.16.18` ships wheels for both runners.
-        kglite-spec: ['kglite>=0.16.18', 'kglite==0.16.18']
+        # break we never saw. `0.16.19` ships wheels for both runners.
+        kglite-spec: ['kglite>=0.16.19', 'kglite==0.16.19']
         include:
-          - kglite-spec: 'kglite>=0.16.18'
+          - kglite-spec: 'kglite>=0.16.19'
             kglite-label: latest
-          - kglite-spec: 'kglite==0.16.18'
+          - kglite-spec: 'kglite==0.16.19'
             kglite-label: floor
     steps:
       - uses: actions/checkout@v7

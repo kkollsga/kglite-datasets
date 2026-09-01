@@ -4,6 +4,28 @@ All notable changes to kglite-datasets are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project adheres to
 semantic versioning (workspace version in the root `Cargo.toml`).
 
+## [Unreleased]
+
+### Changed
+
+- Raised the Python runtime, development, and CI floor from `kglite>=0.16.18`
+  to `kglite>=0.16.19` (both matrix legs move in lockstep; `0.16.19` ships
+  wheels for both runners). The release is the lazy writer lease + automatic
+  refresh work: the MCP server and CLI take a `.kgl`'s lease at the first
+  unsaved change instead of at boot, refuse lost updates, and re-read a served
+  file when it changes on disk; the Rust API gains `WriteOwnership` and
+  `GraphWriterLease::acquire_labeled`. None of that is on our build paths —
+  the wrappers call the kglite Python API only, whose surface is byte-identical
+  between the two tags. The one engine-level change that does reach us is
+  welcome and free: a `storage="disk"` graph now holds the directory's
+  `.kglite.lock` only for its dirty window and releases it at `save`, so a
+  workdir a loader has just published is reopenable by another process while
+  the builder's handle is still alive, instead of only after the builder
+  exits. Our disk-cache probe already treated the lock file as a non-signal
+  (pinned by its tests); its doc-comment now records the 0.16.19 semantics.
+  Golden topology digest verified identical on 0.16.18 and 0.16.19; full
+  offline suite green on 0.16.19.
+
 ## [0.1.12] - 2026-08-31
 
 ### Changed

@@ -40,7 +40,10 @@
 //! 3. **`.kglite.lock` and `seg_000/`** — both present in an *unsaved*
 //!    `storage="disk"` workspace, alongside a `.working-<pid>-<n>/` staging
 //!    dir. Neither is a validity signal; a probe keying on either would
-//!    confidently report a graph that cannot be loaded.
+//!    confidently report a graph that cannot be loaded. Since kglite 0.16.19
+//!    the lock is also *released* at every publish (held for the dirty
+//!    window only), so the file's presence says nothing in either direction:
+//!    it sits in saved and unsaved directories alike.
 
 use std::path::{Path, PathBuf};
 
