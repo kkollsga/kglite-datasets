@@ -4,6 +4,34 @@ All notable changes to kglite-datasets are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project adheres to
 semantic versioning (workspace version in the root `Cargo.toml`).
 
+## [Unreleased]
+
+### Changed
+
+- Raised the Python runtime, development, and CI floor from `kglite>=0.16.19`
+  to `kglite>=0.16.20` (both matrix legs move in lockstep; `0.16.20` ships
+  wheels for both runners). The release's user-visible delta is almost entirely
+  `kglite-mcp-server` — `extensions.writable: true` as a manifest-side
+  `--writable`, `builtins.save_graph: true` registering only `save_graph`, a
+  `save_graph` that no longer rewrites a clean file (with a new `force=true`
+  for a deliberate re-encode), the identity footer now present on reads from a
+  write-enabled server, and the footer/header counter renamed `generation` →
+  `load` alongside a new `file saved` field. This crate ships no MCP server,
+  spawns none, and parses no server output, so none of that reaches us; the
+  `generation` vocabulary in `crates/kglite-datasets/src/disk_graph.rs` is the
+  disk mode's on-disk `generations/` directories, which the rename explicitly
+  does not touch. Two engine-level items were checked against our build paths
+  and are no-ops for them: the `.lock-owner` record's new `released=` line
+  belongs to the file-mode writer lease, which our loaders never take —
+  verified on 0.16.20 that a `from_blueprint`/`save()` build leaves only the
+  `.kgl` behind, and that a `storage="disk"` publish leaves `.kglite.lock`,
+  `CURRENT`, `generations/` and `seg_000/` with no `.lock-owner` at all (disk
+  directories are held by `GraphDirectoryLock`, a different mechanism) — and
+  the fastembed 5 → 6 move is behind a Cargo feature of a crate no workspace
+  member links. Golden topology digest verified identical on 0.16.19 and
+  0.16.20; full offline suite green on 0.16.20 (26 passed, 13 accounted live
+  skips); Rust suite 208 passed.
+
 ## [0.1.13] - 2026-09-01
 
 ### Changed
