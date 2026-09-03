@@ -41,6 +41,32 @@ semantic versioning (workspace version in the root `Cargo.toml`).
   blueprints as `serde_json::Value`, which the change does not touch. Golden
   topology digest identical on 0.16.20 and 0.16.22.
 
+### Changed
+
+- The shipped Sodir blueprint no longer carries keys the engine ignores.
+  kglite 0.16.22 reports unknown blueprint keys, and ours emitted twelve
+  warnings on every user build: a top-level `skipped` block (config-shaped
+  documentation of which tables and columns are deliberately not loaded — inert
+  at the top level, where `skipped` means nothing; the node-level `skipped`
+  lists and the per-node `properties` whitelists are what actually govern), a
+  `spatial_only` flag on nine geometry-only node types, and a `note` on
+  `Stratigraphy`'s `STRAT_PARENT`. None was a typo — every one was intentional
+  annotation — so the content moved to the Sodir loader page under "What the
+  blueprint deliberately leaves out" rather than being deleted. Verified on a
+  full 103-dataset build: the same 488,026 nodes and 634,700 edges, per-type
+  identical, and the build-report warning count drops 20 → 9 (the remainder are
+  the pre-existing stub-vivification and null-FK notices).
+
+### Added
+
+- `test_blueprint_keys.py` — an offline gate that fails if a shipped blueprint
+  declares a key kglite does not read, at any depth (node, `sub_nodes`,
+  `fk_edges`, `junction_edges`, `settings`, top level). This is the class of
+  defect that costs a whole feature in silence — a misspelled `"lables"` builds
+  green and stamps no labels — and 0.16.22 makes it a *warning* on stderr
+  during a user's fetch, which is not something a released wheel can rely on
+  anyone reading. The gate carries its own can-it-fail test.
+
 ### Fixed
 
 - Every documented query example called `g.cypher_query(...)`, a method

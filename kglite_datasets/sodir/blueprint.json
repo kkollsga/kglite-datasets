@@ -1777,8 +1777,7 @@
         "fk_edges": {
           "STRAT_PARENT": {
             "target": "Stratigraphy",
-            "fk": "lsuNpdidLithoStratParent",
-            "note": "Self-referencing hierarchy, FK matches lsuNpdidLithoStrat (pk)"
+            "fk": "lsuNpdidLithoStratParent"
           }
         }
       }
@@ -2534,8 +2533,7 @@
         "Shape__Area",
         "Shape__Length",
         "_geometry"
-      ],
-      "spatial_only": true
+      ]
     },
     "Dome": {
       "csv": "csv/domes.csv",
@@ -2556,8 +2554,7 @@
         "Shape__Area",
         "Shape__Length",
         "_geometry"
-      ],
-      "spatial_only": true
+      ]
     },
     "FaultBoundary": {
       "csv": "csv/faults_boundaries.csv",
@@ -2577,8 +2574,7 @@
         "OBJECTID",
         "Shape__Length",
         "_geometry"
-      ],
-      "spatial_only": true
+      ]
     },
     "SedimentBoundary": {
       "csv": "csv/sediment_boundaries.csv",
@@ -2596,8 +2592,7 @@
         "OBJECTID",
         "Shape__Length",
         "_geometry"
-      ],
-      "spatial_only": true
+      ]
     },
     "AreaStatus": {
       "csv": "csv/areastatus.csv",
@@ -2621,8 +2616,7 @@
         "Shape__Area",
         "Shape__Length",
         "_geometry"
-      ],
-      "spatial_only": true
+      ]
     },
     "SbmSurveyArea": {
       "csv": "csv/sbm_survey_area.csv",
@@ -2723,8 +2717,7 @@
         "Shape__Area",
         "Shape__Length",
         "_geometry"
-      ],
-      "spatial_only": true
+      ]
     },
     "SbmQuadrant": {
       "csv": "csv/sbm_quadrant.csv",
@@ -2741,8 +2734,7 @@
         "Shape__Area",
         "Shape__Length",
         "_geometry"
-      ],
-      "spatial_only": true
+      ]
     },
     "SbmOccurrence": {
       "csv": "csv/sbm_occurrence.csv",
@@ -2757,8 +2749,7 @@
         "OBJECTID",
         "_geometry",
         "sbmOccurenceGuid"
-      ],
-      "spatial_only": true
+      ]
     },
     "SbmPlayEstimate": {
       "csv": "csv/sbm_play_resource_estimate.csv",
@@ -2783,8 +2774,7 @@
         "Shape__Length",
         "_geometry",
         "sbmPlayGuid"
-      ],
-      "spatial_only": true
+      ]
     },
     "SeismicScientific": {
       "csv": "csv/seismic_acquisition_scientific.csv",
@@ -2915,81 +2905,6 @@
             }
           }
         }
-      }
-    }
-  },
-  "skipped": {
-    "tables": {
-      "strat_litho_wellbore": {
-        "csv": "csv/strat_litho_wellbore.csv",
-        "reason": "Same data as wellbore_formation_top"
-      },
-      "strat_litho_wellbore_core": {
-        "csv": "csv/strat_litho_wellbore_core.csv",
-        "reason": "Core subset of formation tops - data available via WellboreCore"
-      },
-      "wellbore_core_photo_aggr": {
-        "csv": "csv/wellbore_core_photo_aggr.csv",
-        "reason": "Aggregated view of wellbore_core_photo - no unique data"
-      },
-      "seismic_acquisition_licence": {
-        "csv": "csv/seismic_acquisition_licence.csv",
-        "reason": "Seismic permit data - not a graph relationship, company-specific permits"
-      }
-    },
-    "columns": {
-      "_global": {
-        "OBJECTID": "ArcGIS sequential row counter - not a meaningful ID",
-        "SHAPE": "Duplicate of _geometry column",
-        "Shape__Area": "ArcGIS computed - derivable from WKT geometry",
-        "Shape__Length": "ArcGIS computed - derivable from WKT geometry",
-        "*FactPageUrl": "URL links to Sodir website - not needed in graph",
-        "*FactMapUrl": "URL links to Sodir map views",
-        "*PressReleaseUrl": "URL links to press releases",
-        "*GUID": "Internal UUID identifiers"
-      },
-      "wellbore.csv": {
-        "wlbNsDeg": "DMS latitude degrees - redundant with geometry/lat/lon",
-        "wlbNsMin": "DMS latitude minutes - redundant",
-        "wlbNsSec": "DMS latitude seconds - redundant",
-        "wlbNsCode": "DMS N/S hemisphere code - redundant",
-        "wlbEwDeg": "DMS longitude degrees - redundant",
-        "wlbEwMin": "DMS longitude minutes - redundant",
-        "wlbEwSec": "DMS longitude seconds - redundant",
-        "wlbEwCode": "DMS E/W hemisphere code - redundant",
-        "wlbNsDecDeg": "Decimal degrees latitude - redundant with computed latitude",
-        "wlbEwDecDeg": "Decimal degrees longitude - redundant with computed longitude",
-        "wlbNsUtm": "UTM northing - redundant with geometry",
-        "wlbEwUtm": "UTM easting - redundant with geometry",
-        "wlbUtmZone": "UTM zone - redundant with WGS84 conversion",
-        "wlbGeodeticDatum": "Geodetic datum reference - all converted to WGS84",
-        "wlbDrillPerNsDeg": "Drill permit latitude - partial/redundant",
-        "wlbDrillPerEwDeg": "Drill permit longitude - partial/redundant",
-        "wlbNamePart1": "Parsed well name component 1 - redundant with wlbWellboreName",
-        "wlbNamePart2": "Parsed well name component 2 - redundant",
-        "wlbNamePart3": "Parsed well name component 3 - redundant",
-        "wlbNamePart4": "Parsed well name component 4 - redundant",
-        "wlbNamePart5": "Parsed well name component 5 - redundant",
-        "wlbNamePart6": "Parsed well name component 6 - redundant",
-        "wlbEntryDay": "Entry day - redundant with wlbEntryDate",
-        "wlbEntryMonth": "Entry month - redundant with wlbEntryDate",
-        "wlbCompletionDay": "Completion day - redundant with wlbCompletionDate",
-        "wlbCompletionMonth": "Completion month - redundant with wlbCompletionDate"
-      },
-      "facility.csv": {
-        "fclNsDeg": "DMS latitude degrees - redundant with geometry",
-        "fclNsMin": "DMS latitude minutes - redundant",
-        "fclNsSec": "DMS latitude seconds - redundant",
-        "fclNsCode": "DMS N/S code - redundant",
-        "fclEwDeg": "DMS longitude degrees - redundant",
-        "fclEwMin": "DMS longitude minutes - redundant",
-        "fclEwSec": "DMS longitude seconds - redundant",
-        "fclEwCode": "DMS E/W code - redundant",
-        "fclNsUtm": "UTM northing - redundant",
-        "fclEwUtm": "UTM easting - redundant",
-        "fclUtmZone": "UTM zone - redundant",
-        "fclUtmHemisphere": "UTM hemisphere - redundant",
-        "fclGeodeticDatum": "Geodetic datum - redundant"
       }
     }
   }
