@@ -4,6 +4,43 @@ All notable changes to kglite-datasets are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project adheres to
 semantic versioning (workspace version in the root `Cargo.toml`).
 
+## [Unreleased]
+
+### Changed
+
+- Raised the Python runtime, development, and CI floor from `kglite>=0.16.20`
+  to `kglite>=0.16.22` (both matrix legs move in lockstep; `0.16.22` ships
+  wheels for both runners). This crate tracks the current engine, and 0.16.22
+  is the blueprint-loader release, so the delta lands directly on our build
+  path rather than beside it. `0.16.21` is skipped: its user-visible surface is
+  `CypherTimeoutError`, `save_graph(force=)` behind the MCP write opt-in, and a
+  closed `from_records` key set — we catch no timeout class, ship no MCP server,
+  and call `from_blueprint`, not `from_records`.
+- **The parallel-edge fix was measured against the real Sodir corpus, not
+  reasoned about.** 0.16.22 fixes `from_blueprint` folding a streamed CSV's
+  later chunks onto the first chunk's edges (dropping rows and overwriting
+  properties) — anything past `KGLITE_BLUEPRINT_JUNCTION_CHUNK_SIZE`, default
+  100,000 rows. A full 103-dataset Sodir fetch and build on 0.16.20 and 0.16.22
+  gives **the same 488,026 nodes and 634,700 edges, with no per-type
+  difference**: the largest junction CSV we ship is
+  `csv/wellbore_formation_top.csv` at 41,390 rows, 41% of one chunk, so no
+  Sodir junction CSV has ever crossed a chunk boundary and no shipped Sodir
+  graph was losing edges. The SEC blueprint declares no junction edges at all.
+  The probe is not vacuous: forcing `KGLITE_BLUEPRINT_JUNCTION_CHUNK_SIZE=10000`
+  makes 0.16.20 lose 7,234 of the 634,700 edges (`HAS_FORMATION_TOP` 2,264,
+  `LICENCE_TRANSFER` 4,013, `HAS_OWNER` 883, `HAS_LICENSEE` 74) while 0.16.22
+  loses none — so the exposure was real and only the corpus size kept us out of
+  it. Two sub-node CSVs *do* exceed 100,000 rows
+  (`wellbore_paly_slide.csv` 103,255, `seismic_acquisition_polygon.csv`
+  101,177) and were unaffected either way: every row of a sub-node CSV is its
+  own node, so those edges have no parallel pair to fold onto.
+- No Rust compile break: 0.16.22's added fields on `Blueprint` / `Settings` /
+  `NodeSpec` / `FkEdge` / `JunctionEdge` (and `JunctionEdge::target` becoming
+  `Vec<String>`) break struct literals, but no workspace member links the
+  `kglite` crate — `crates/kglite-datasets/src/sodir/blueprint.rs` deep-merges
+  blueprints as `serde_json::Value`, which the change does not touch. Golden
+  topology digest identical on 0.16.20 and 0.16.22.
+
 ## [0.1.14] - 2026-09-02
 
 ### Changed

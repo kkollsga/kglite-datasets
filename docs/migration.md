@@ -44,7 +44,7 @@ from kglite import KnowledgeGraph, from_blueprint, load   # unchanged
 
 ```toml
 [dependencies]
-kglite = "0.16.20"        # the engine (graph build, persistence)
+kglite = "0.16.22"        # the engine (graph build, persistence)
 kglite-datasets = "0.1"   # the loaders
 ```
 
