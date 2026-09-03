@@ -41,6 +41,21 @@ semantic versioning (workspace version in the root `Cargo.toml`).
   blueprints as `serde_json::Value`, which the change does not touch. Golden
   topology digest identical on 0.16.20 and 0.16.22.
 
+### Fixed
+
+- Every documented query example called `g.cypher_query(...)`, a method
+  `KnowledgeGraph` does not have — four copy-pasteable snippets (README,
+  docs index, SEC and Sodir loader pages) that raised `AttributeError` on the
+  first line a reader ran. The method is `g.cypher(...)`. Two of them were
+  wrong twice over, verified against a real build: the SEC example traversed
+  `(:Company)-[:FILED]->(:Filing)` and read `f.form`, where the blueprint
+  declares `(:Filing)-[:FILED_BY]->(:Company)` and `form_type`; the Sodir
+  example traversed `[:HAS_WELLBORE]` and read `.name`, where the graph has
+  `(:Wellbore)-[:IN_FIELD]->(:Field)` and `title`. The README / docs-index
+  snippet also queried `(:Company)` after rebinding `g` to the Wikidata graph,
+  so it returned nothing; it is now a label census that answers on whichever
+  of the three graphs the reader built.
+
 ## [0.1.14] - 2026-09-02
 
 ### Changed

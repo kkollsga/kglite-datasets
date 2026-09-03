@@ -18,7 +18,7 @@ g = SEC.fetch(workdir, "13F-HR", "TSLA", years=2,
 g = SEC.open(workdir, years=10, detailed=2, mode="mapped",
              user_agent="Name email@dom")
 
-g.cypher_query("MATCH (c:Company)-[:FILED]->(f:Filing) RETURN c.name, f.form LIMIT 5")
+g.cypher("MATCH (f:Filing)-[:FILED_BY]->(c:Company) RETURN c.name, f.form_type LIMIT 5")
 ```
 
 The `workdir` holds three tiers: `raw/` (fetched source), `processed/` (emitted

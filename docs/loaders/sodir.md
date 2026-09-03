@@ -19,7 +19,7 @@ g = sodir.open(workdir)
 # CSVs only, no graph build:
 csvs = sodir.fetch_all(workdir)
 
-g.cypher_query("MATCH (f:Field)-[:HAS_WELLBORE]->(w:Wellbore) RETURN f.name, w.name LIMIT 5")
+g.cypher("MATCH (w:Wellbore)-[:IN_FIELD]->(f:Field) RETURN f.title, w.title LIMIT 5")
 ```
 
 Layout managed under `workdir`:

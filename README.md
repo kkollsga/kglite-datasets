@@ -42,7 +42,8 @@ g = sodir.open(workdir)
 from kglite_datasets import wikidata
 g = wikidata.open(workdir)
 
-g.cypher_query("MATCH (c:Company) RETURN c.name LIMIT 5")
+# Each call above returns a KnowledgeGraph — query the one you built:
+g.cypher("MATCH (n) RETURN labels(n) AS labels, count(*) AS nodes ORDER BY nodes DESC LIMIT 5")
 ```
 
 Importing `sec` never drags in `sodir`/`wikidata`'s optional stack (lazy
