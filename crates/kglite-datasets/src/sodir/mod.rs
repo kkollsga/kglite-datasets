@@ -30,6 +30,7 @@ pub mod catalog;
 pub mod client;
 pub mod enhance;
 pub mod error;
+pub mod estimates;
 pub mod fetch;
 pub mod geojson_wkt;
 pub mod index;

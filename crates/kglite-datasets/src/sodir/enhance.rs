@@ -10,7 +10,7 @@ use wkt::Wkt;
 use crate::sodir::ages::{self, Compatibility};
 use crate::sodir::error::{Result, SodirError};
 
-pub const VERSION: u32 = 6;
+pub const VERSION: u32 = 10;
 const OUTPUT: &str = "_derived_discovery_play.csv";
 const CANDIDATE_OUTPUT: &str = "_derived_discovery_play_candidate.csv";
 const FIELD_OUTPUT: &str = "_derived_field_play.csv";
@@ -45,7 +45,7 @@ struct Candidate<'a> {
     play: &'a Play,
     compatibility: Compatibility,
     matched: Vec<ages::AgeAtom>,
-    matched_slot: usize,
+    matched_slots: Vec<usize>,
     distance_m: f64,
 }
 
@@ -137,6 +137,29 @@ pub fn apply(csv_dir: &Path) -> Result<EnhancementReport> {
             ]);
         }
     }
+    let mut published_by_discovery: BTreeMap<String, Vec<_>> = BTreeMap::new();
+    for discovery in &discoveries {
+        let (Some(discovery_id), Some(discovery_name)) = (
+            cell(discovery, "dscNpdidDiscovery"),
+            cell(discovery, "dscName"),
+        ) else {
+            continue;
+        };
+        let Ok(id_number) = discovery_id.parse::<u64>() else {
+            continue;
+        };
+        published_by_discovery
+            .entry(discovery_id.to_string())
+            .or_insert_with(|| {
+                crate::sodir::play_examples::examples_for_discovery(discovery_name, id_number)
+                    .filter(|example| {
+                        play_catalog
+                            .get(&example.play_id.to_string())
+                            .is_some_and(|name| name == example.play_name)
+                    })
+                    .collect()
+            });
+    }
 
     for (discovery_id, rows) in discovery_groups {
         let signatures: std::collections::BTreeSet<_> = rows
@@ -159,22 +182,27 @@ pub fn apply(csv_dir: &Path) -> Result<EnhancementReport> {
             continue;
         }
         let discovery = rows[0];
-        let field_id = cell(discovery, "fldNpdidField").unwrap_or_default();
-        if let Some(examples) = published_by_field
-            .get(field_id)
-            .filter(|values| values.len() == 1)
-        {
-            let example = examples[0];
-            links.push(direct_link_row(&discovery_id, example));
-            report.links += 1;
-            continue;
+        let published = published_by_discovery
+            .get(&discovery_id)
+            .cloned()
+            .unwrap_or_default();
+        let published_play_ids: std::collections::BTreeSet<_> = published
+            .iter()
+            .map(|example| example.play_id.to_string())
+            .collect();
+        for example in &published {
+            links.push(published_discovery_link_row(&discovery_id, example));
         }
         let Some(well_id) = cell(discovery, "wlbNpdidWellbore") else {
-            report.unmatched += 1;
+            if published.is_empty() {
+                report.unmatched += 1;
+            }
             continue;
         };
         let Some(well) = wells.get(well_id) else {
-            report.unmatched += 1;
+            if published.is_empty() {
+                report.unmatched += 1;
+            }
             continue;
         };
 
@@ -184,53 +212,83 @@ pub fn apply(csv_dir: &Path) -> Result<EnhancementReport> {
             .filter(|candidate| candidate.distance_m.is_finite())
             .collect();
         if candidates.is_empty() {
-            report.unmatched += 1;
+            if published.is_empty() {
+                report.unmatched += 1;
+            }
             continue;
         }
-        let contained = candidates
+        candidates.sort_by(|a, b| {
+            a.distance_m
+                .total_cmp(&b.distance_m)
+                .then_with(|| stable_id_cmp(&a.play.id, &b.play.id))
+        });
+        let contained: Vec<_> = candidates
             .iter()
-            .any(|c| c.distance_m <= DISTANCE_TIE_EPSILON_M);
-        candidates.sort_by(|a, b| candidate_cmp(a, b, contained));
-        let winner = &candidates[0];
-        let tied: Vec<_> = candidates
-            .iter()
-            .filter(|c| candidate_cmp(c, winner, contained).is_eq())
+            .filter(|c| c.distance_m <= DISTANCE_TIE_EPSILON_M)
             .collect();
-        if tied.len() == 1 {
-            let method = if contained {
-                report.contained += 1;
-                "contains"
-            } else {
-                report.nearest += 1;
-                "nearest"
-            };
-            links.push(inferred_link_row(&discovery_id, well, winner, method));
-            for candidate in candidates.iter().skip(1) {
+        if !contained.is_empty() {
+            for candidate in &contained {
+                if !published_play_ids.contains(&candidate.play.id) {
+                    links.push(inferred_link_row(
+                        &discovery_id,
+                        well,
+                        candidate,
+                        "contains",
+                        contained.len(),
+                        false,
+                    ));
+                    report.contained += 1;
+                }
+            }
+            for candidate in candidates.iter().filter(|c| {
+                c.distance_m > DISTANCE_TIE_EPSILON_M && !published_play_ids.contains(&c.play.id)
+            }) {
                 diagnostics.push(candidate_diagnostic_row(
                     &discovery_id,
                     well,
                     candidate,
-                    "lower_rank",
+                    "not_containing",
                 ));
             }
-        } else {
-            report.unmatched += 1;
-            for candidate in &candidates {
-                let reason = if candidate_cmp(candidate, winner, contained).is_eq() {
-                    "equal_best_tie"
-                } else {
-                    "lower_rank"
-                };
+        } else if published.is_empty() {
+            let nearest_distance = candidates[0].distance_m;
+            let nearest: Vec<_> = candidates
+                .iter()
+                .filter(|c| (c.distance_m - nearest_distance).abs() <= DISTANCE_TIE_EPSILON_M)
+                .collect();
+            for candidate in &nearest {
+                links.push(inferred_link_row(
+                    &discovery_id,
+                    well,
+                    candidate,
+                    "nearest",
+                    nearest.len(),
+                    nearest.len() > 1,
+                ));
+                report.nearest += 1;
+            }
+            for candidate in candidates
+                .iter()
+                .filter(|c| (c.distance_m - nearest_distance).abs() > DISTANCE_TIE_EPSILON_M)
+            {
                 diagnostics.push(candidate_diagnostic_row(
                     &discovery_id,
                     well,
                     candidate,
-                    reason,
+                    "farther_fallback_candidate",
                 ));
             }
         }
     }
     links.sort_by(|a, b| stable_id_cmp(&a[0], &b[0]).then_with(|| stable_id_cmp(&a[1], &b[1])));
+    links.dedup_by(|left, right| left[0] == right[0] && left[1] == right[1]);
+    diagnostics.sort_by(|a, b| {
+        stable_id_cmp(&a[0], &b[0])
+            .then_with(|| stable_id_cmp(&a[1], &b[1]))
+            .then_with(|| a[3].cmp(&b[3]))
+    });
+    diagnostics
+        .dedup_by(|left, right| left[0] == right[0] && left[1] == right[1] && left[3] == right[3]);
     report.links = links.len();
     report.candidates = diagnostics.len();
     report.field_links = field_links.len();
@@ -241,47 +299,32 @@ pub fn apply(csv_dir: &Path) -> Result<EnhancementReport> {
 }
 
 fn candidate<'a>(well: &Well, play: &'a Play) -> Option<Candidate<'a>> {
-    let mut best: Option<(Compatibility, Vec<ages::AgeAtom>, usize)> = None;
+    let mut best: Option<(Compatibility, Vec<ages::AgeAtom>, Vec<usize>)> = None;
     for (index, source_age) in well.ages.iter().enumerate() {
         let Some(matched) = ages::compatibility(source_age, &play.age) else {
             continue;
         };
-        best = Some((matched.compatibility, matched.atoms, index + 1));
-        break;
+        match &mut best {
+            None => best = Some((matched.compatibility, matched.atoms, vec![index + 1])),
+            Some((compatibility, atoms, slots)) => {
+                if compatibility_rank(matched.compatibility) > compatibility_rank(*compatibility) {
+                    *compatibility = matched.compatibility;
+                }
+                atoms.extend(matched.atoms);
+                atoms.sort();
+                atoms.dedup();
+                slots.push(index + 1);
+            }
+        }
     }
-    let (compatibility, matched, matched_slot) = best?;
+    let (compatibility, matched, matched_slots) = best?;
     Some(Candidate {
         play,
         compatibility,
         matched,
-        matched_slot,
+        matched_slots,
         distance_m: distance_metres(well.point, &play.geometry),
     })
-}
-
-fn candidate_cmp(
-    left: &Candidate<'_>,
-    right: &Candidate<'_>,
-    contained_class: bool,
-) -> std::cmp::Ordering {
-    if contained_class {
-        let left_contained = left.distance_m <= DISTANCE_TIE_EPSILON_M;
-        let right_contained = right.distance_m <= DISTANCE_TIE_EPSILON_M;
-        right_contained
-            .cmp(&left_contained)
-            .then_with(|| left.matched_slot.cmp(&right.matched_slot))
-            .then_with(|| {
-                compatibility_rank(right.compatibility).cmp(&compatibility_rank(left.compatibility))
-            })
-    } else {
-        left.matched_slot.cmp(&right.matched_slot).then_with(|| {
-            if (left.distance_m - right.distance_m).abs() <= DISTANCE_TIE_EPSILON_M {
-                std::cmp::Ordering::Equal
-            } else {
-                left.distance_m.total_cmp(&right.distance_m)
-            }
-        })
-    }
 }
 
 fn inferred_link_row(
@@ -289,6 +332,8 @@ fn inferred_link_row(
     well: &Well,
     selected: &Candidate<'_>,
     method: &str,
+    candidate_count: usize,
+    ambiguous: bool,
 ) -> Vec<String> {
     vec![
         discovery_id.into(),
@@ -299,29 +344,29 @@ fn inferred_link_row(
         format!("{:.3}", selected.distance_m),
         compatibility_name(selected.compatibility).into(),
         json_atoms(&selected.matched),
-        format!("[{}]", selected.matched_slot),
+        serde_json::to_string(&selected.matched_slots).expect("slot list serializes"),
         json_atoms(&normalized_well_ages(well)),
         json_atoms(ages::normalize(&selected.play.age).unwrap_or_default()),
         "local_equirectangular_polygon_boundary".into(),
         "true".into(),
-        "1".into(),
-        "false".into(),
+        candidate_count.to_string(),
+        ambiguous.to_string(),
         "designated_discovery_wellbore".into(),
         String::new(),
         String::new(),
     ]
 }
 
-fn direct_link_row(
+fn published_discovery_link_row(
     discovery_id: &str,
-    example: &crate::sodir::play_examples::PublishedFieldExample,
+    example: &crate::sodir::play_examples::PublishedDiscoveryExample,
 ) -> Vec<String> {
     vec![
         discovery_id.into(),
         example.play_id.to_string(),
         String::new(),
-        example.source_url.into(),
-        "via_field_example".into(),
+        example.source_label.into(),
+        "published_discovery_example".into(),
         String::new(),
         String::new(),
         "[]".into(),
@@ -329,10 +374,10 @@ fn direct_link_row(
         "[]".into(),
         "[]".into(),
         String::new(),
-        "true".into(),
+        "false".into(),
         "1".into(),
         "false".into(),
-        "field_published_example".into(),
+        "discovery_published_example".into(),
         example.source_url.into(),
         example.accessed_on.into(),
     ]
@@ -357,7 +402,7 @@ fn candidate_diagnostic_row(
         format!("{:.3}", candidate.distance_m),
         compatibility_name(candidate.compatibility).into(),
         json_atoms(&candidate.matched),
-        format!("[{}]", candidate.matched_slot),
+        serde_json::to_string(&candidate.matched_slots).expect("slot list serializes"),
         json_atoms(&normalized_well_ages(well)),
         json_atoms(ages::normalize(&candidate.play.age).unwrap_or_default()),
         "local_equirectangular_polygon_boundary".into(),
@@ -781,7 +826,7 @@ mod tests {
     }
 
     #[test]
-    fn hc_slot_priority_precedes_compatibility_quality() {
+    fn all_compatible_hc_slots_are_preserved_as_provenance() {
         let well = Well {
             id: "1".into(),
             point: geo::Point::new(1.0, 1.0),
@@ -793,8 +838,8 @@ mod tests {
             age: "Lower-Middle Jurassic".into(),
         };
         let candidate = candidate(&well, &play).unwrap();
-        assert_eq!(candidate.matched_slot, 1);
-        assert_eq!(candidate.compatibility, Compatibility::Partial);
+        assert_eq!(candidate.matched_slots, vec![1, 2]);
+        assert_eq!(candidate.compatibility, Compatibility::Full);
     }
 
     #[test]
@@ -820,7 +865,7 @@ mod tests {
     }
 
     #[test]
-    fn unique_published_field_example_precedes_detection() {
+    fn published_field_example_remains_field_scoped() {
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path();
         write(
@@ -831,13 +876,10 @@ mod tests {
         write(dir, "wellbore.csv", "wlbNpdidWellbore,wkt_geometry\n");
         write(dir, "play.csv", "plyNPDID,plyName,plyAge,wkt_geometry\n242,nju-1,Upper Jurassic,\"POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))\"\n");
         let report = apply(dir).unwrap();
-        assert_eq!(report.links, 1);
+        assert_eq!(report.links, 0);
         assert_eq!(report.field_links, 1);
         let assigned = read_records(&dir.join(OUTPUT)).unwrap();
-        assert_eq!(assigned[0]["plyNPDID"], "242");
-        assert_eq!(assigned[0]["match_method"], "via_field_example");
-        assert_eq!(assigned[0]["evidence_scope"], "field_published_example");
-        assert_eq!(assigned[0]["inferred"], "true");
+        assert!(assigned.is_empty());
         let fields = read_records(&dir.join(FIELD_OUTPUT)).unwrap();
         assert_eq!(fields[0]["match_method"], "published_example");
         assert_eq!(fields[0]["inferred"], "false");
@@ -850,5 +892,56 @@ mod tests {
         let report = apply(dir).unwrap();
         assert_eq!(report.links, 0);
         assert_eq!(report.field_links, 0);
+    }
+
+    #[test]
+    fn published_gjoa_nord_plays_do_not_inherit_the_field_play() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        write(dir, "discovery.csv", "dscNpdidDiscovery,dscName,wlbNpdidWellbore,fldNpdidField,fldName\n45651,35/9-3 (Gjøa Nord),,4467574,GJØA\n");
+        write(dir, "wellbore.csv", "wlbNpdidWellbore,wkt_geometry\n");
+        write(dir, "play.csv", "plyNPDID,plyName,plyAge,wkt_geometry\n242,nju-1,Upper Jurassic,\n243,nkl-2,Cretaceous,\n247,nku-5,Upper Cretaceous,\n");
+        let report = apply(dir).unwrap();
+        assert_eq!(report.links, 2);
+        assert_eq!(report.field_links, 1);
+        let assigned = read_records(&dir.join(OUTPUT)).unwrap();
+        assert_eq!(
+            assigned
+                .iter()
+                .map(|row| row["plyNPDID"].as_str())
+                .collect::<Vec<_>>(),
+            vec!["243", "247"]
+        );
+        assert!(assigned
+            .iter()
+            .all(|row| row["match_method"] == "published_discovery_example"));
+        assert!(!assigned.iter().any(|row| row["plyNPDID"] == "242"));
+    }
+
+    #[test]
+    fn assigns_all_containing_plays_across_hc_slots_once_per_pair() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        write(
+            dir,
+            "discovery.csv",
+            "dscNpdidDiscovery,dscName,wlbNpdidWellbore\n1,Synthetic,10\n",
+        );
+        write(dir, "wellbore.csv", "wlbNpdidWellbore,wlbAgeWithHc1,wlbAgeWithHc2,wlbAgeWithHc3,wkt_geometry\n10,EARLY JURASSIC,LATE JURASSIC,,POINT (1 1)\n");
+        write(dir, "play.csv", "plyNPDID,plyName,plyAge,wkt_geometry\n1,lower,Lower-Middle Jurassic,\"POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))\"\n2,upper,Upper Jurassic,\"POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))\"\n2,upper,Upper Jurassic,\"POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))\"\n");
+        let report = apply(dir).unwrap();
+        assert_eq!(report.links, 2);
+        let rows = read_records(&dir.join(OUTPUT)).unwrap();
+        assert_eq!(
+            rows.iter()
+                .map(|row| row["plyNPDID"].as_str())
+                .collect::<Vec<_>>(),
+            vec!["1", "2"]
+        );
+        assert_eq!(rows[0]["matched_hc_slots"], "[1]");
+        assert_eq!(rows[1]["matched_hc_slots"], "[2]");
+        assert!(read_records(&dir.join(CANDIDATE_OUTPUT))
+            .unwrap()
+            .is_empty());
     }
 }

@@ -8,12 +8,14 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 
 ### Added
 
-- Sodir now assigns at most one `Discovery -[:IN_PLAY]-> Play` relationship.
-  Official published field examples take precedence; otherwise designated-well
-  containment precedes nearest-polygon fallback, with HC Age1, Age2, then Age3
-  priority and no distance cutoff. Unselected and tied hypotheses remain
-  inspectable through `CANDIDATE_PLAY`, while direct published `Field IN_PLAY`
-  facts retain their source URL and access date.
+- Sodir now assigns every matching `Discovery -[:IN_PLAY]-> Play`
+  relationship. Published discovery examples are authoritative, and all
+  age-compatible polygons containing the designated well are retained across
+  HC slots. Only discoveries without published or contained matches use the
+  closest compatible polygon fallback, with exact-distance ties preserved and
+  no cutoff. `CANDIDATE_PLAY` retains only unassigned alternatives. Published
+  `Field IN_PLAY` facts remain field-scoped and retain their source URL and
+  access date; field affiliation alone never assigns a discovery.
 - `DiscoveryVolume` provides one query shape for original reported discovery
   reserves and conservative generated observations. It copies the latest field
   snapshot only for strict sole-discovery histories, keeps missing values null,
@@ -28,6 +30,14 @@ semantic versioning (workspace version in the root `Cargo.toml`).
   assumptions, publication URL/year, and access date, and remain unresolved if
   the constituent, redirect, direct-observation, interval, or snapshot checks
   fail.
+- Redirected discovery reserve rows whose complete component set is zero remain
+  present but are marked unusable as `resources_reported_with_parent`; this
+  avoids treating reporting-group placeholders as evidence of no resources.
+  A bounded initial catalog provides sourced range midpoints for three verified
+  discoveries: Gjøa Nord, Gjengalunden, and Røver Sør. Gjøa Nord carries the
+  dated 2022 preliminary 2.2–3.4 million Sm³ OE midpoint as a generated 2.8
+  million Sm³ OE observation, with component values left null and full
+  range/source provenance retained.
 
 ## [0.1.16] - 2026-09-08
 

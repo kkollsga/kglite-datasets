@@ -70,6 +70,10 @@ pub fn apply(csv_dir: &Path) -> Result<VolumeReport> {
     let field_rows = read_optional(&field_reserves_path)?;
     let membership_rows = read_optional(&memberships_path)?;
     let redirects = redirect_map(&discoveries);
+    let discovery_ids: BTreeSet<String> = discoveries
+        .iter()
+        .filter_map(|row| cell(row, "dscNpdidDiscovery").map(str::to_string))
+        .collect();
     let current_fields = lookup(&discoveries, "dscNpdidDiscovery", "fldNpdidField");
     let direct_reported: BTreeSet<String> = reserve_rows
         .iter()
@@ -78,7 +82,13 @@ pub fn apply(csv_dir: &Path) -> Result<VolumeReport> {
 
     let mut output = Vec::new();
     let mut report = VolumeReport::default();
-    emit_reported(&reserve_rows, &redirects, &mut output, &mut report);
+    emit_reported(
+        &reserve_rows,
+        &redirects,
+        &discovery_ids,
+        &mut output,
+        &mut report,
+    );
 
     let memberships = load_memberships(&membership_rows);
     let snapshots = load_snapshots(&field_rows);
@@ -115,6 +125,13 @@ pub fn apply(csv_dir: &Path) -> Result<VolumeReport> {
                 || row[6] == "troll_published_component_allocation"
         });
     }
+    emit_published_estimates(
+        &discoveries,
+        &discovery_ids,
+        &current_fields,
+        &redirects,
+        &mut output,
+    );
 
     output.sort_by(|a, b| a[0].cmp(&b[0]));
     output.dedup_by(|left, right| left[0] == right[0]);
@@ -133,6 +150,107 @@ pub fn apply(csv_dir: &Path) -> Result<VolumeReport> {
     report.unresolved = output.iter().filter(|row| row[5] == "false").count();
     write_rows(&csv_dir.join(OUTPUT), &output)?;
     Ok(report)
+}
+
+fn emit_published_estimates(
+    discoveries: &[Row],
+    discovery_ids: &BTreeSet<String>,
+    current_fields: &BTreeMap<String, String>,
+    redirects: &BTreeMap<String, String>,
+    output: &mut Vec<Vec<String>>,
+) {
+    use crate::sodir::estimates::{self, Unit};
+    for discovery in discoveries {
+        let (Some(id), Some(name)) = (
+            cell(discovery, "dscNpdidDiscovery"),
+            cell(discovery, "dscName"),
+        ) else {
+            continue;
+        };
+        let Ok(id_number) = id.parse::<u64>() else {
+            continue;
+        };
+        if output.iter().any(|row| row[1] == id && row[5] == "true") {
+            continue;
+        }
+        let Some(estimate) = estimates::newest_applicable_estimate(name, id_number) else {
+            continue;
+        };
+        let redirect = redirects.get(id).map(String::as_str).unwrap_or("");
+        if !redirect.is_empty()
+            && (!discovery_ids.contains(redirect)
+                || current_fields.get(id) != current_fields.get(redirect))
+        {
+            continue;
+        }
+        let values = [
+            estimate_value(estimate.recoverable_oil, Unit::MillionSm3Oil),
+            estimate_value(estimate.recoverable_gas, Unit::BillionSm3Gas),
+            estimate_value(estimate.recoverable_ngl, Unit::MillionTonnesNgl),
+            estimate_value(estimate.recoverable_condensate, Unit::MillionSm3Condensate),
+            estimate_value(estimate.recoverable_oe, Unit::MillionSm3OilEquivalent),
+        ];
+        if values.iter().all(Option::is_none) {
+            continue;
+        }
+        let source_json = serde_json::to_string(estimate).expect("published estimate serializes");
+        let identity = digest(&source_json);
+        let mut row = volume_row(
+            &format!("published-estimate-{id}-{identity}"),
+            id,
+            id,
+            current_fields.get(id).map(String::as_str).unwrap_or(""),
+            true,
+            true,
+            "published_resource_range_midpoint",
+            "published_whole_discovery_estimate",
+            "newest_applicable_published_appraisal",
+            estimate.estimate_date,
+            "",
+            &values,
+            redirect,
+            &identity,
+            &source_json,
+            "",
+            "",
+            1,
+            false,
+            "",
+            "",
+        );
+        let len = row.len();
+        row[len - 4] = source_json;
+        row[len - 3] = estimate.source_url.into();
+        row[len - 2] = estimate.estimate_date.get(..4).unwrap_or("").into();
+        row[len - 1] = estimate.accessed_on.into();
+        output.push(row);
+    }
+}
+
+fn estimate_value(
+    value: Option<crate::sodir::estimates::EstimateValue>,
+    expected_unit: crate::sodir::estimates::Unit,
+) -> Option<f64> {
+    let value = value.filter(|value| value.unit == expected_unit)?;
+    value
+        .point
+        .or_else(|| match (value.minimum, value.maximum) {
+            (Some(minimum), Some(maximum))
+                if minimum.is_finite() && maximum.is_finite() && minimum <= maximum =>
+            {
+                let source_places = decimal_places(minimum).max(decimal_places(maximum));
+                let scale = 10_f64.powi((source_places + 1) as i32);
+                Some((((minimum + maximum) / 2.0) * scale).round() / scale)
+            }
+            _ => None,
+        })
+}
+
+fn decimal_places(value: f64) -> usize {
+    value
+        .to_string()
+        .split_once('.')
+        .map_or(0, |(_, fraction)| fraction.len())
 }
 
 const TROLL_FIELD: &str = "46437";
@@ -269,6 +387,7 @@ fn emit_troll_allocation(
 fn emit_reported(
     rows: &[Row],
     redirects: &BTreeMap<String, String>,
+    discovery_ids: &BTreeSet<String>,
     output: &mut Vec<Vec<String>>,
     report: &mut VolumeReport,
 ) {
@@ -297,13 +416,18 @@ fn emit_reported(
         let source_json = row_json(row);
         let identity = digest(&source_json);
         let conflict_key = format!("{source_id}|{date}|{rc}");
+        let reporting_parent = redirects.get(source_id).filter(|target| {
+            target.as_str() != source_id && discovery_ids.contains(target.as_str())
+        });
+        let reported_with_parent =
+            reporting_parent.is_some() && values.iter().all(|value| *value == Some(0.0));
         output.push(volume_row(
             &format!("reported-{}", digest(&key)),
             source_id,
             source_id,
             "",
             false,
-            true,
+            !reported_with_parent,
             "reported_observation",
             "reported",
             "discovery_reserves",
@@ -317,7 +441,11 @@ fn emit_reported(
             "",
             duplicates.len(),
             conflict_keys.contains(&conflict_key),
-            "",
+            if reported_with_parent {
+                "resources_reported_with_parent"
+            } else {
+                ""
+            },
             "",
         ));
         report.reported += 1;
@@ -1012,18 +1140,30 @@ mod tests {
         write(
             tmp.path(),
             "discovery_reserves.csv",
-            "OBJECTID,dscNpdidDiscovery,dscDateOffResEstDisplay,dscReservesRC,dscRecoverableOil,dscRecoverableGas\n\
-             9,1,1767139200000,4F,10,\n8,1,1767139200000,4F,10,\n7,1,1767139200000,4F,11,\n",
+            "OBJECTID,dscNpdidDiscovery,dscDateOffResEstDisplay,dscReservesRC,dscRecoverableOil,dscRecoverableGas,dscRecoverableNGL,dscRecoverableCondensate,dscRecoverableOe\n\
+             9,1,1767139200000,4F,10,,,,\n8,1,1767139200000,4F,10,,,,\n7,1,1767139200000,4F,11,,,,\n6,1,1767139200000,5F,0,0,0,0,0\n",
         );
         let report = apply(tmp.path()).unwrap();
-        assert_eq!(report.reported, 2);
+        assert_eq!(report.reported, 3);
         let rows = read_rows(&tmp.path().join(OUTPUT)).unwrap();
         assert!(rows.iter().all(|row| row["dscNpdidDiscovery"] == "1"));
         assert!(rows.iter().all(|row| row["raw_redirect_id"] == "2"));
-        assert!(rows.iter().all(|row| row["resource_class"] == "4F"));
-        assert!(rows.iter().all(|row| row["conflict"] == "true"));
+        let zero = rows
+            .iter()
+            .find(|row| row["resource_class"] == "5F")
+            .unwrap();
+        assert_eq!(zero["usable"], "false");
+        assert_eq!(zero["unresolved_reason"], "resources_reported_with_parent");
+        assert_eq!(zero["recoverable_oil"], "0");
+        assert!(rows
+            .iter()
+            .filter(|row| row["resource_class"] == "4F")
+            .all(|row| row["conflict"] == "true"));
         assert!(rows.iter().any(|row| row["source_duplicate_count"] == "2"));
-        assert!(rows.iter().all(|row| row["recoverable_gas"].is_empty()));
+        assert!(rows
+            .iter()
+            .filter(|row| row["resource_class"] == "4F")
+            .all(|row| row["recoverable_gas"].is_empty()));
         assert!(rows.iter().all(|row| row["estimate_date"] == "2025-12-31"));
     }
 
@@ -1145,5 +1285,65 @@ mod tests {
         assert!(rows
             .iter()
             .any(|row| row["unresolved_reason"] == "reported_overlap"));
+    }
+
+    #[test]
+    fn gjoa_nord_zero_parent_observation_is_unusable_and_midpoint_is_component_null() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(tmp.path(), "discovery.csv", "dscNpdidDiscovery,dscName,dscNpdidResInclInDisc,fldNpdidField\n45651,35/9-3 (Gjøa Nord),44786,4467574\n44786,35/9-1 Gjøa,,4467574\n");
+        write(tmp.path(), "discovery_reserves.csv", "dscNpdidDiscovery,dscDateOffResEstDisplay,dscReservesRC,dscRecoverableOil,dscRecoverableGas,dscRecoverableNGL,dscRecoverableCondensate,dscRecoverableOe\n45651,2025-12-31,5F,0,0,0,0,0\n");
+        apply(tmp.path()).unwrap();
+        let rows = read_rows(&tmp.path().join(OUTPUT)).unwrap();
+        let source = rows
+            .iter()
+            .find(|row| row["method"] == "reported_observation")
+            .unwrap();
+        assert_eq!(source["usable"], "false");
+        assert_eq!(
+            source["unresolved_reason"],
+            "resources_reported_with_parent"
+        );
+        assert_eq!(source["recoverable_oe"], "0");
+        let midpoint = rows
+            .iter()
+            .find(|row| row["method"] == "published_resource_range_midpoint")
+            .unwrap();
+        assert_eq!(midpoint["usable"], "true");
+        assert_eq!(midpoint["estimate_date"], "2022-05-12");
+        assert_eq!(midpoint["recoverable_oe"], "2.8");
+        assert!(midpoint["recoverable_oil"].is_empty());
+        assert!(midpoint["recoverable_gas"].is_empty());
+        assert!(midpoint["source_record_json"].contains("million_sm3_oil_equivalent"));
+
+        write(tmp.path(), "discovery.csv", "dscNpdidDiscovery,dscName,dscNpdidResInclInDisc,fldNpdidField\n45651,35/9-3 (Gjøa Nord),44786,999\n44786,35/9-1 Gjøa,,4467574\n");
+        apply(tmp.path()).unwrap();
+        let rows = read_rows(&tmp.path().join(OUTPUT)).unwrap();
+        assert!(!rows
+            .iter()
+            .any(|row| row["method"] == "published_resource_range_midpoint"));
+
+        write(tmp.path(), "discovery.csv", "dscNpdidDiscovery,dscName,dscNpdidResInclInDisc,fldNpdidField\n45651,35/9-3 (Gjøa Nord),44786,4467574\n44786,35/9-1 Gjøa,,4467574\n");
+        write(tmp.path(), "discovery_reserves.csv", "dscNpdidDiscovery,dscDateOffResEstDisplay,dscReservesRC,dscRecoverableOil,dscRecoverableGas,dscRecoverableNGL,dscRecoverableCondensate,dscRecoverableOe\n45651,2025-12-31,5F,0,0,0,0,1\n");
+        apply(tmp.path()).unwrap();
+        let rows = read_rows(&tmp.path().join(OUTPUT)).unwrap();
+        assert!(!rows
+            .iter()
+            .any(|row| row["method"] == "published_resource_range_midpoint"));
+    }
+
+    #[test]
+    fn published_range_midpoint_has_stable_decimal_precision() {
+        use crate::sodir::estimates::{EstimateValue, Unit};
+        let value = EstimateValue {
+            unit: Unit::MillionSm3OilEquivalent,
+            point: None,
+            minimum: Some(2.7),
+            maximum: Some(7.4),
+            preliminary: true,
+        };
+        assert_eq!(
+            estimate_value(Some(value), Unit::MillionSm3OilEquivalent),
+            Some(5.05)
+        );
     }
 }

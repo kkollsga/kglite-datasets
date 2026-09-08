@@ -40,26 +40,28 @@ converts ArcGIS geometry to WKT before the graph build.
 
 ## Play assignments
 
-The packaged enhancement assigns at most one `Discovery IN_PLAY` relationship
-per discovery. Published SODIR example fields receive direct `Field IN_PLAY`
-links with source URLs. A unique field example takes precedence for its
-discoveries, with `via_field_example` provenance recording that assignment
-basis. Multiple published field examples require further resolving evidence.
+The packaged enhancement assigns every matching `Discovery IN_PLAY`
+relationship. Published discovery examples are authoritative and retain their
+source URLs. Published example fields receive separate direct `Field IN_PLAY`
+links; field affiliation alone never assigns a constituent discovery.
 
-For the remaining discoveries, `DISCOVERED_BY` follows the source
-`wlbNpdidWellbore`. The helper normalizes well HC ages and play ages, then tests
-the designated well against full play polygons, including boundaries and
-excluding holes. Within containing candidates, HC Age 1 precedes HC Age 2,
-which precedes HC Age 3; full age compatibility precedes partial compatibility
-within the selected slot. If none contain the well, the earliest compatible
-HC slot and nearest polygon boundary determine the fallback, without a distance
-cutoff. Distances use a local equirectangular projection, recorded in
-`distance_method`. Unknown ages cannot produce a spatial assignment.
+For every discovery, `DISCOVERED_BY` follows the source `wlbNpdidWellbore`.
+Published discovery pairs are unioned with spatial matches: the helper
+normalizes well HC ages and play ages, then tests the designated well against
+full play polygons, including boundaries and excluding holes. Every
+age-compatible containing play across the HC slots is retained, with matched
+slots recorded as provenance. If no published or containing play matches, the
+nearest compatible polygon boundary determines the fallback without a distance
+cutoff; exact-distance ties are retained and marked ambiguous. Distances use a
+local equirectangular projection, recorded in `distance_method`. Unknown ages
+cannot produce a spatial assignment.
 
-Equal best candidates remain on diagnostic `CANDIDATE_PLAY` relationships;
-they do not create multiple assigned `IN_PLAY` edges. Use assigned edges for
-aggregation. The published examples are positive evidence, not a complete
-membership inventory.
+Unassigned alternatives remain on diagnostic `CANDIDATE_PLAY` relationships;
+an assigned discovery/play pair never also appears there. The published
+examples are positive evidence, not a complete membership inventory.
+Deduplicate discoveries within each play before aggregating volumes. A
+discovery may legitimately belong to several plays, so totals from different
+plays overlap and must not be summed into an estate-wide total.
 
 ## Discovery volumes
 
@@ -76,6 +78,14 @@ estimates where a single entrant can be isolated. These bases are not
 interchangeable: an annual reserve change is not a current discovery resource
 estimate, and a reported contingent component is not necessarily a whole-field
 total. Do not sum every date, class and method together.
+
+Redirected observations whose complete component set is zero remain source
+records but are unusable as `resources_reported_with_parent`. When no usable
+structured observation exists, a verified whole-discovery appraisal estimate
+may supply the newest applicable sourced point or range midpoint. The bounded
+initial catalog contains three verified preliminary drilling-report ranges:
+Gjøa Nord, Gjengalunden, and Røver Sør. Gjøa Nord's 2022 2.2–3.4 million Sm³
+OE range becomes a 2.8 midpoint while oil, gas, NGL and condensate stay null.
 
 Troll has a curated approximate allocation: two-thirds of gas-associated
 components go to East, and oil to West. The published gas proportion comes
