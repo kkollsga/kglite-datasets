@@ -115,11 +115,12 @@ The source response is cached, the article is stored as Markdown on a
 `PressRelease` node, and `Wellbore -[:HAS_PRESS_RELEASE]-> PressRelease`
 preserves the source association.
 
-The document pass only selects discoveries with uncertain structured
-volumetrics: no usable selected volume, or a selected total shared by more than
-one discovery. A usable individual discovery volume or a field total covering
-one discovery is sufficient, so its release is skipped. `limit` is applied
-after this eligibility filter.
+The document pass defines uncertain volumetrics narrowly: the discovery is
+assigned to a field, but `discovery_reserves.csv` contains no numeric
+recoverable-volume component for that discovery. An unfielded discovery does
+not trigger retrieval, and any reported discovery volume, including zero, is
+sufficient to skip its release. A shared field reserve does not count as a
+discovery-specific volume. `limit` is applied after this eligibility filter.
 
 `PressReleaseVolume` children record number-unit expressions such as
 `3–5 million Sm3` or `15–30 billion Sm3`, together with commodity, scope,

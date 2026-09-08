@@ -143,9 +143,9 @@ fn refresh(
     Ok(d.into())
 }
 
-/// Fetch, cache and normalize releases for discoveries with uncertain
-/// structured volumes. `limit` is intended for bounded pilots; `None`
-/// processes every eligible URL.
+/// Fetch, cache and normalize releases for discoveries assigned to a field
+/// but lacking a numeric discovery-reserves volume. `limit` is intended for
+/// bounded pilots; `None` processes every eligible URL.
 #[pyfunction]
 #[pyo3(signature = (workdir, limit=None))]
 fn fetch_press_releases(

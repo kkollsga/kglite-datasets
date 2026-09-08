@@ -13,9 +13,9 @@ semantic versioning (workspace version in the root `Cargo.toml`).
   `PressRelease` to every referenced `Wellbore`. Conservative
   `PressReleaseVolume` evidence rows extract adjacent number-unit expressions,
   reject production rates, classify commodity and scope, and retain the source
-  sentence. Fetching is limited to discoveries without an individual usable
-  structured volume or whose selected total covers multiple discoveries; a
-  bounded `press_release_limit` supports exploratory batches.
+  sentence. Fetching is limited to discoveries assigned to a field that have
+  no numeric entry in `discovery_reserves.csv`; a bounded
+  `press_release_limit` supports exploratory batches.
 
 - `DiscoveryVolume` now uses a simple source hierarchy: the latest structured
   `FieldReserves` snapshot is primary for every associated discovery, with one

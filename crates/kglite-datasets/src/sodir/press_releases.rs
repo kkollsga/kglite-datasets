@@ -107,10 +107,9 @@ pub fn ensure_outputs(csv_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Fetch up to `limit` releases for discoveries whose selected structured
-/// volume is missing, unusable, or shared across discoveries. `None` processes
-/// every eligible URL. Individual failures do not discard the rest of the
-/// batch.
+/// Fetch up to `limit` releases for field discoveries without a numeric
+/// `discovery_reserves.csv` volume. `None` processes every eligible URL.
+/// Individual failures do not discard the rest of the batch.
 pub fn fetch(workdir: &Workdir, limit: Option<usize>) -> Result<PressReleaseReport> {
     workdir.ensure_dirs()?;
     let uncertain = uncertain_discovery_ids(&workdir.csv_dir())?;
@@ -223,83 +222,76 @@ fn uncertain_discovery_ids(csv_dir: &Path) -> Result<BTreeSet<String>> {
             discovery_path.display()
         )));
     }
-    let all = column_values(&discovery_path, "dscNpdidDiscovery")?;
-    let volume_path = csv_dir.join("_derived_discovery_volume.csv");
-    if !volume_path.is_file() {
-        return Ok(all);
-    }
-
-    let mut reader = csv::Reader::from_path(&volume_path)
-        .map_err(|error| SodirError::Csv(format!("open {}: {error}", volume_path.display())))?;
+    let mut reader = csv::Reader::from_path(&discovery_path)
+        .map_err(|error| SodirError::Csv(format!("open {}: {error}", discovery_path.display())))?;
     let headers = reader
         .headers()
-        .map_err(|error| SodirError::Csv(format!("headers {}: {error}", volume_path.display())))?
+        .map_err(|error| SodirError::Csv(format!("headers {}: {error}", discovery_path.display())))?
         .clone();
-    let index = |name: &str| {
-        headers
-            .iter()
-            .position(|header| header == name)
-            .ok_or_else(|| SodirError::Malformed(format!("{} lacks {name}", volume_path.display())))
-    };
-    let discovery_index = index("dscNpdidDiscovery")?;
-    let usable_index = index("usable")?;
-    let covered_index = index("covered_discovery_count")?;
-    let component_indices: Vec<_> = [
-        "recoverable_oil",
-        "recoverable_gas",
-        "recoverable_ngl",
-        "recoverable_condensate",
-        "recoverable_oe",
-    ]
-    .into_iter()
-    .map(index)
-    .collect::<Result<_>>()?;
-    let mut certainty: BTreeMap<String, bool> = BTreeMap::new();
+    let discovery_index = required_index(&headers, "dscNpdidDiscovery", &discovery_path)?;
+    let field_index = required_index(&headers, "fldNpdidField", &discovery_path)?;
+    let mut field_discoveries = BTreeSet::new();
     for record in reader.records() {
         let record = record.map_err(|error| SodirError::Csv(error.to_string()))?;
         let discovery_id = record.get(discovery_index).unwrap_or("").trim();
-        if discovery_id.is_empty() || !all.contains(discovery_id) {
-            continue;
+        let field_id = record.get(field_index).unwrap_or("").trim();
+        if !discovery_id.is_empty() && !field_id.is_empty() {
+            field_discoveries.insert(discovery_id.to_string());
         }
-        let usable = record.get(usable_index).unwrap_or("") == "true";
-        let individual = record
-            .get(covered_index)
-            .and_then(|value| value.parse::<usize>().ok())
-            == Some(1);
-        let has_volume = component_indices
-            .iter()
-            .any(|index| !record.get(*index).unwrap_or("").trim().is_empty());
-        certainty
-            .entry(discovery_id.to_string())
-            .and_modify(|certain| *certain &= usable && individual && has_volume)
-            .or_insert(usable && individual && has_volume);
     }
-    Ok(all
-        .into_iter()
-        .filter(|id| !certainty.get(id).copied().unwrap_or(false))
+
+    let reserves_path = csv_dir.join("discovery_reserves.csv");
+    if !reserves_path.is_file() {
+        return Ok(field_discoveries);
+    }
+    let mut reader = csv::Reader::from_path(&reserves_path)
+        .map_err(|error| SodirError::Csv(format!("open {}: {error}", reserves_path.display())))?;
+    let headers = reader
+        .headers()
+        .map_err(|error| SodirError::Csv(format!("headers {}: {error}", reserves_path.display())))?
+        .clone();
+    let discovery_index = required_index(&headers, "dscNpdidDiscovery", &reserves_path)?;
+    let component_indices: Vec<_> = [
+        "dscRecoverableOil",
+        "dscRecoverableGas",
+        "dscRecoverableNGL",
+        "dscRecoverableCondensate",
+        "dscRecoverableOe",
+    ]
+    .into_iter()
+    .filter_map(|name| headers.iter().position(|header| header == name))
+    .collect();
+    if component_indices.is_empty() {
+        return Err(SodirError::Malformed(format!(
+            "{} lacks recoverable-volume columns",
+            reserves_path.display()
+        )));
+    }
+    let mut discoveries_with_volumes = BTreeSet::new();
+    for record in reader.records() {
+        let record = record.map_err(|error| SodirError::Csv(error.to_string()))?;
+        let discovery_id = record.get(discovery_index).unwrap_or("").trim();
+        let has_numeric_volume = component_indices.iter().any(|index| {
+            record
+                .get(*index)
+                .and_then(|value| value.trim().parse::<f64>().ok())
+                .is_some_and(f64::is_finite)
+        });
+        if !discovery_id.is_empty() && has_numeric_volume {
+            discoveries_with_volumes.insert(discovery_id.to_string());
+        }
+    }
+    Ok(field_discoveries
+        .difference(&discoveries_with_volumes)
+        .cloned()
         .collect())
 }
 
-fn column_values(path: &Path, column: &str) -> Result<BTreeSet<String>> {
-    let mut reader = csv::Reader::from_path(path)
-        .map_err(|error| SodirError::Csv(format!("open {}: {error}", path.display())))?;
-    let headers = reader
-        .headers()
-        .map_err(|error| SodirError::Csv(format!("headers {}: {error}", path.display())))?
-        .clone();
-    let index = headers
+fn required_index(headers: &csv::StringRecord, name: &str, path: &Path) -> Result<usize> {
+    headers
         .iter()
-        .position(|header| header == column)
-        .ok_or_else(|| SodirError::Malformed(format!("{} lacks {column}", path.display())))?;
-    let mut values = BTreeSet::new();
-    for record in reader.records() {
-        let record = record.map_err(|error| SodirError::Csv(error.to_string()))?;
-        let value = record.get(index).unwrap_or("").trim();
-        if !value.is_empty() {
-            values.insert(value.to_string());
-        }
-    }
-    Ok(values)
+        .position(|header| header == name)
+        .ok_or_else(|| SodirError::Malformed(format!("{} lacks {name}", path.display())))
 }
 
 fn release_references(
@@ -832,7 +824,7 @@ mod tests {
         .unwrap();
         fs::write(
             workdir.csv_path("discovery"),
-            "dscNpdidDiscovery,dscName\n20,Discovery\n",
+            "dscNpdidDiscovery,dscName,fldNpdidField\n20,Discovery,30\n",
         )
         .unwrap();
         let raw_dir = workdir.root().join("press_releases/raw");
@@ -854,7 +846,7 @@ mod tests {
     }
 
     #[test]
-    fn selects_only_uncertain_discovery_releases() {
+    fn selects_only_field_discoveries_without_reported_volumes() {
         let temp = tempfile::tempdir().unwrap();
         let workdir = Workdir::new(temp.path());
         workdir.ensure_dirs().unwrap();
@@ -863,7 +855,7 @@ mod tests {
         let missing_url = "https://example.invalid/missing";
         fs::write(
             workdir.csv_path("discovery"),
-            "dscNpdidDiscovery,dscName\n1,Certain\n2,Shared A\n3,Shared B\n4,Missing\n",
+            "dscNpdidDiscovery,dscName,fldNpdidField\n1,Reported,10\n2,Field member A,20\n3,Field member B,20\n4,Unfielded,\n",
         )
         .unwrap();
         fs::write(
@@ -874,26 +866,24 @@ mod tests {
         )
         .unwrap();
         fs::write(
-            workdir.csv_dir().join("_derived_discovery_volume.csv"),
-            "dscNpdidDiscovery,usable,covered_discovery_count,recoverable_oil,recoverable_gas,recoverable_ngl,recoverable_condensate,recoverable_oe\n1,true,1,5,,,,5\n2,true,2,10,,,,10\n3,true,2,10,,,,10\n",
+            workdir.csv_path("discovery_reserves"),
+            "dscNpdidDiscovery,dscRecoverableOil,dscRecoverableGas,dscRecoverableNGL,dscRecoverableCondensate,dscRecoverableOe\n1,0,,,,0\n",
         )
         .unwrap();
         let raw_dir = workdir.root().join("press_releases/raw");
         fs::create_dir_all(&raw_dir).unwrap();
         let html = b"<html><body><main><article><h1>Release</h1><p>No volume estimate.</p></article></main></body></html>";
-        for url in [shared_url, missing_url] {
-            fs::write(raw_dir.join(format!("{}.source", digest(url))), html).unwrap();
-        }
+        fs::write(raw_dir.join(format!("{}.source", digest(shared_url))), html).unwrap();
 
         let report = fetch(&workdir, None).unwrap();
-        assert_eq!(report.uncertain_discoveries, 3);
-        assert_eq!(report.eligible_releases, 2);
-        assert_eq!(report.selected, 2);
-        assert_eq!(report.cached, 2);
-        assert_eq!(report.wellbore_links, 3);
+        assert_eq!(report.uncertain_discoveries, 2);
+        assert_eq!(report.eligible_releases, 1);
+        assert_eq!(report.selected, 1);
+        assert_eq!(report.cached, 1);
+        assert_eq!(report.wellbore_links, 2);
         let releases = fs::read_to_string(workdir.csv_dir().join(RELEASE_OUTPUT)).unwrap();
         assert!(!releases.contains(certain_url));
         assert!(releases.contains(shared_url));
-        assert!(releases.contains(missing_url));
+        assert!(!releases.contains(missing_url));
     }
 }

@@ -101,7 +101,7 @@ def test_press_release_markdown_volume_and_wellbore_link(tmp_path: Path) -> None
     (csv_dir / "wellbore.csv").write_text(
         f"wlbNpdidWellbore,wlbWellboreName,dscNpdidDiscovery,wlbPressReleaseUrl\n10,TEST-1,20,{url}\n"
     )
-    (csv_dir / "discovery.csv").write_text("dscNpdidDiscovery,dscName\n20,Test discovery\n")
+    (csv_dir / "discovery.csv").write_text("dscNpdidDiscovery,dscName,fldNpdidField\n20,Test discovery,30\n")
     raw_dir = tmp_path / "press_releases" / "raw"
     raw_dir.mkdir(parents=True)
     release_id = hashlib.sha256(url.encode()).hexdigest()
