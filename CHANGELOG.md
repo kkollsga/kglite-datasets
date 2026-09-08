@@ -41,6 +41,11 @@ semantic versioning (workspace version in the root `Cargo.toml`).
   serves the calendar-less graph after this upgrade. Pass `force_rebuild=True`
   once (or delete the workdir's `graph*/`) to pick up the hierarchy. Sodir and
   Wikidata are unaffected — neither blueprint has a `calendar` step.
+- The blueprint-key gate's mirrored key sets now match kglite 0.17.1's
+  `schema.rs` exactly in both directions, which gained `files` (top level) and
+  `file` (node spec and junction edge) with the 0.16.23 blueprint
+  input-formats work. Neither shipped blueprint uses them; the gate's own
+  claim to mirror the engine at the declared floor is what moved.
 - No Rust compile break and no Rust change: no workspace member links the
   `kglite` crate, so 0.17's API moves (`compute_description` taking a
   `DescribeRequest`, the `load_rdf` fresh-graph restriction) cannot reach us.

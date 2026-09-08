@@ -13,7 +13,9 @@ blueprint is wrong the moment it is written, not the moment it is loaded.
 
 The accepted key sets below mirror ``crates/kglite/src/graph/blueprint/
 schema.rs`` (``ACCEPTED_BLUEPRINT_KEYS`` and friends) in the kglite version at
-the declared floor. Drift is one-directional and safe: a key kglite *adds*
+the declared floor — 0.17.1, which added ``files`` at the top level and
+``file`` on a node spec and a junction edge (the 0.16.23 blueprint
+input-formats work). Drift is one-directional and safe: a key kglite *adds*
 cannot make this test wrong until we start using it, at which point the test
 fails loudly and this list gets the new name.
 
@@ -29,11 +31,12 @@ import pytest
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 
-ACCEPTED_BLUEPRINT_KEYS = frozenset({"settings", "nodes", "compute", "ontology"})
+ACCEPTED_BLUEPRINT_KEYS = frozenset({"settings", "files", "nodes", "compute", "ontology"})
 ACCEPTED_SETTINGS_KEYS = frozenset({"input_root", "root", "output_path", "output_file", "output", "auto_purge"})
 ACCEPTED_NODE_KEYS = frozenset(
     {
         "csv",
+        "file",
         "pk",
         "title",
         "parent",
@@ -51,6 +54,7 @@ ACCEPTED_FK_EDGE_KEYS = frozenset({"target", "fk", "properties", "property_types
 ACCEPTED_JUNCTION_EDGE_KEYS = frozenset(
     {
         "csv",
+        "file",
         "source_fk",
         "target",
         "target_fk",
