@@ -98,7 +98,10 @@ def test_press_release_markdown_volume_and_wellbore_link(tmp_path: Path) -> None
     csv_dir = tmp_path / "csv"
     csv_dir.mkdir()
     url = "https://example.invalid/discovery-release"
-    (csv_dir / "wellbore.csv").write_text(f"wlbNpdidWellbore,wlbWellboreName,wlbPressReleaseUrl\n10,TEST-1,{url}\n")
+    (csv_dir / "wellbore.csv").write_text(
+        f"wlbNpdidWellbore,wlbWellboreName,dscNpdidDiscovery,wlbPressReleaseUrl\n10,TEST-1,20,{url}\n"
+    )
+    (csv_dir / "discovery.csv").write_text("dscNpdidDiscovery,dscName\n20,Test discovery\n")
     raw_dir = tmp_path / "press_releases" / "raw"
     raw_dir.mkdir(parents=True)
     release_id = hashlib.sha256(url.encode()).hexdigest()
@@ -111,6 +114,8 @@ def test_press_release_markdown_volume_and_wellbore_link(tmp_path: Path) -> None
 
     report = wrapper.fetch_press_releases(tmp_path, limit=1, verbose=False)
     assert report == {
+        "uncertain_discoveries": 1,
+        "eligible_releases": 1,
         "selected": 1,
         "fetched": 0,
         "cached": 1,

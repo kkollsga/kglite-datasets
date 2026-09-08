@@ -143,9 +143,9 @@ fn refresh(
     Ok(d.into())
 }
 
-/// Fetch, cache and normalize the distinct press releases referenced by
-/// `wellbore.csv`. `limit` is intended for bounded pilots; `None` processes
-/// every distinct URL.
+/// Fetch, cache and normalize releases for discoveries with uncertain
+/// structured volumes. `limit` is intended for bounded pilots; `None`
+/// processes every eligible URL.
 #[pyfunction]
 #[pyo3(signature = (workdir, limit=None))]
 fn fetch_press_releases(
@@ -158,6 +158,8 @@ fn fetch_press_releases(
         .detach(|| press_releases::fetch(&wd, limit))
         .map_err(map_err)?;
     let d = PyDict::new(py);
+    d.set_item("uncertain_discoveries", report.uncertain_discoveries)?;
+    d.set_item("eligible_releases", report.eligible_releases)?;
     d.set_item("selected", report.selected)?;
     d.set_item("fetched", report.fetched)?;
     d.set_item("cached", report.cached)?;

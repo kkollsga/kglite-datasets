@@ -27,6 +27,8 @@ const VOLUME_OUTPUT: &str = "_derived_press_release_volume.csv";
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PressReleaseReport {
+    pub uncertain_discoveries: usize,
+    pub eligible_releases: usize,
     pub selected: usize,
     pub fetched: usize,
     pub cached: usize,
@@ -84,6 +86,12 @@ struct RawVolumeMatch {
     unit: String,
 }
 
+#[derive(Default)]
+struct ReleaseReference {
+    well_ids: BTreeSet<String>,
+    has_uncertain_discovery: bool,
+}
+
 /// Create empty graph-facing outputs when document enrichment has not been
 /// requested. This keeps the packaged blueprint usable without a network pass.
 pub fn ensure_outputs(csv_dir: &Path) -> Result<()> {
@@ -99,12 +107,15 @@ pub fn ensure_outputs(csv_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Fetch up to `limit` distinct release URLs referenced by `wellbore.csv`.
-/// `None` processes every distinct URL. Individual fetch or parse failures are
-/// recorded as document rows and do not discard the rest of the batch.
+/// Fetch up to `limit` releases for discoveries whose selected structured
+/// volume is missing, unusable, or shared across discoveries. `None` processes
+/// every eligible URL. Individual failures do not discard the rest of the
+/// batch.
 pub fn fetch(workdir: &Workdir, limit: Option<usize>) -> Result<PressReleaseReport> {
     workdir.ensure_dirs()?;
-    let references = release_references(&workdir.csv_path("wellbore"))?;
+    let uncertain = uncertain_discovery_ids(&workdir.csv_dir())?;
+    let references = release_references(&workdir.csv_path("wellbore"), &uncertain)?;
+    let eligible_releases = references.len();
     let selected: Vec<_> = references
         .into_iter()
         .take(limit.unwrap_or(usize::MAX))
@@ -113,6 +124,8 @@ pub fn fetch(workdir: &Workdir, limit: Option<usize>) -> Result<PressReleaseRepo
     fs::create_dir_all(&raw_dir)?;
     let client = ArcGISClient::new()?;
     let mut report = PressReleaseReport {
+        uncertain_discoveries: uncertain.len(),
+        eligible_releases,
         selected: selected.len(),
         ..Default::default()
     };
@@ -120,7 +133,8 @@ pub fn fetch(workdir: &Workdir, limit: Option<usize>) -> Result<PressReleaseRepo
     let mut links = Vec::new();
     let mut volumes = Vec::new();
 
-    for (url, well_ids) in selected {
+    for (url, reference) in selected {
+        let well_ids = reference.well_ids;
         let release_id = digest(&url);
         let raw_path = raw_dir.join(format!("{release_id}.source"));
         let bytes = if raw_path.is_file() {
@@ -201,7 +215,97 @@ pub fn fetch(workdir: &Workdir, limit: Option<usize>) -> Result<PressReleaseRepo
     Ok(report)
 }
 
-fn release_references(path: &Path) -> Result<BTreeMap<String, BTreeSet<String>>> {
+fn uncertain_discovery_ids(csv_dir: &Path) -> Result<BTreeSet<String>> {
+    let discovery_path = csv_dir.join("discovery.csv");
+    if !discovery_path.is_file() {
+        return Err(SodirError::Malformed(format!(
+            "press-release enrichment requires {}",
+            discovery_path.display()
+        )));
+    }
+    let all = column_values(&discovery_path, "dscNpdidDiscovery")?;
+    let volume_path = csv_dir.join("_derived_discovery_volume.csv");
+    if !volume_path.is_file() {
+        return Ok(all);
+    }
+
+    let mut reader = csv::Reader::from_path(&volume_path)
+        .map_err(|error| SodirError::Csv(format!("open {}: {error}", volume_path.display())))?;
+    let headers = reader
+        .headers()
+        .map_err(|error| SodirError::Csv(format!("headers {}: {error}", volume_path.display())))?
+        .clone();
+    let index = |name: &str| {
+        headers
+            .iter()
+            .position(|header| header == name)
+            .ok_or_else(|| SodirError::Malformed(format!("{} lacks {name}", volume_path.display())))
+    };
+    let discovery_index = index("dscNpdidDiscovery")?;
+    let usable_index = index("usable")?;
+    let covered_index = index("covered_discovery_count")?;
+    let component_indices: Vec<_> = [
+        "recoverable_oil",
+        "recoverable_gas",
+        "recoverable_ngl",
+        "recoverable_condensate",
+        "recoverable_oe",
+    ]
+    .into_iter()
+    .map(index)
+    .collect::<Result<_>>()?;
+    let mut certainty: BTreeMap<String, bool> = BTreeMap::new();
+    for record in reader.records() {
+        let record = record.map_err(|error| SodirError::Csv(error.to_string()))?;
+        let discovery_id = record.get(discovery_index).unwrap_or("").trim();
+        if discovery_id.is_empty() || !all.contains(discovery_id) {
+            continue;
+        }
+        let usable = record.get(usable_index).unwrap_or("") == "true";
+        let individual = record
+            .get(covered_index)
+            .and_then(|value| value.parse::<usize>().ok())
+            == Some(1);
+        let has_volume = component_indices
+            .iter()
+            .any(|index| !record.get(*index).unwrap_or("").trim().is_empty());
+        certainty
+            .entry(discovery_id.to_string())
+            .and_modify(|certain| *certain &= usable && individual && has_volume)
+            .or_insert(usable && individual && has_volume);
+    }
+    Ok(all
+        .into_iter()
+        .filter(|id| !certainty.get(id).copied().unwrap_or(false))
+        .collect())
+}
+
+fn column_values(path: &Path, column: &str) -> Result<BTreeSet<String>> {
+    let mut reader = csv::Reader::from_path(path)
+        .map_err(|error| SodirError::Csv(format!("open {}: {error}", path.display())))?;
+    let headers = reader
+        .headers()
+        .map_err(|error| SodirError::Csv(format!("headers {}: {error}", path.display())))?
+        .clone();
+    let index = headers
+        .iter()
+        .position(|header| header == column)
+        .ok_or_else(|| SodirError::Malformed(format!("{} lacks {column}", path.display())))?;
+    let mut values = BTreeSet::new();
+    for record in reader.records() {
+        let record = record.map_err(|error| SodirError::Csv(error.to_string()))?;
+        let value = record.get(index).unwrap_or("").trim();
+        if !value.is_empty() {
+            values.insert(value.to_string());
+        }
+    }
+    Ok(values)
+}
+
+fn release_references(
+    path: &Path,
+    uncertain: &BTreeSet<String>,
+) -> Result<BTreeMap<String, ReleaseReference>> {
     if !path.is_file() {
         return Err(SodirError::Malformed(format!(
             "press-release enrichment requires {}",
@@ -222,18 +326,23 @@ fn release_references(path: &Path) -> Result<BTreeMap<String, BTreeSet<String>>>
         .iter()
         .position(|name| name == "wlbNpdidWellbore")
         .ok_or_else(|| SodirError::Malformed("wellbore.csv lacks wlbNpdidWellbore".into()))?;
-    let mut references: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    let discovery_index = headers
+        .iter()
+        .position(|name| name == "dscNpdidDiscovery")
+        .ok_or_else(|| SodirError::Malformed("wellbore.csv lacks dscNpdidDiscovery".into()))?;
+    let mut references: BTreeMap<String, ReleaseReference> = BTreeMap::new();
     for record in reader.records() {
         let record = record.map_err(|error| SodirError::Csv(error.to_string()))?;
         let url = record.get(url_index).unwrap_or("").trim();
         let well_id = record.get(well_index).unwrap_or("").trim();
+        let discovery_id = record.get(discovery_index).unwrap_or("").trim();
         if !url.is_empty() && !well_id.is_empty() {
-            references
-                .entry(url.to_string())
-                .or_default()
-                .insert(well_id.to_string());
+            let reference = references.entry(url.to_string()).or_default();
+            reference.well_ids.insert(well_id.to_string());
+            reference.has_uncertain_discovery |= uncertain.contains(discovery_id);
         }
     }
+    references.retain(|_, reference| reference.has_uncertain_discovery);
     Ok(references)
 }
 
@@ -716,7 +825,14 @@ mod tests {
         let url = "https://example.invalid/release";
         fs::write(
             workdir.csv_path("wellbore"),
-            format!("wlbNpdidWellbore,wlbPressReleaseUrl\n10,{url}\n11,{url}\n"),
+            format!(
+                "wlbNpdidWellbore,dscNpdidDiscovery,wlbPressReleaseUrl\n10,20,{url}\n11,20,{url}\n"
+            ),
+        )
+        .unwrap();
+        fs::write(
+            workdir.csv_path("discovery"),
+            "dscNpdidDiscovery,dscName\n20,Discovery\n",
         )
         .unwrap();
         let raw_dir = workdir.root().join("press_releases/raw");
@@ -735,5 +851,49 @@ mod tests {
         let release_csv = fs::read_to_string(workdir.csv_dir().join(RELEASE_OUTPUT)).unwrap();
         assert!(release_csv.contains("# Discovery"));
         assert!(release_csv.contains("6.1 and 11.8"));
+    }
+
+    #[test]
+    fn selects_only_uncertain_discovery_releases() {
+        let temp = tempfile::tempdir().unwrap();
+        let workdir = Workdir::new(temp.path());
+        workdir.ensure_dirs().unwrap();
+        let certain_url = "https://example.invalid/certain";
+        let shared_url = "https://example.invalid/shared";
+        let missing_url = "https://example.invalid/missing";
+        fs::write(
+            workdir.csv_path("discovery"),
+            "dscNpdidDiscovery,dscName\n1,Certain\n2,Shared A\n3,Shared B\n4,Missing\n",
+        )
+        .unwrap();
+        fs::write(
+            workdir.csv_path("wellbore"),
+            format!(
+                "wlbNpdidWellbore,dscNpdidDiscovery,wlbPressReleaseUrl\n10,1,{certain_url}\n20,2,{shared_url}\n30,3,{shared_url}\n40,4,{missing_url}\n"
+            ),
+        )
+        .unwrap();
+        fs::write(
+            workdir.csv_dir().join("_derived_discovery_volume.csv"),
+            "dscNpdidDiscovery,usable,covered_discovery_count,recoverable_oil,recoverable_gas,recoverable_ngl,recoverable_condensate,recoverable_oe\n1,true,1,5,,,,5\n2,true,2,10,,,,10\n3,true,2,10,,,,10\n",
+        )
+        .unwrap();
+        let raw_dir = workdir.root().join("press_releases/raw");
+        fs::create_dir_all(&raw_dir).unwrap();
+        let html = b"<html><body><main><article><h1>Release</h1><p>No volume estimate.</p></article></main></body></html>";
+        for url in [shared_url, missing_url] {
+            fs::write(raw_dir.join(format!("{}.source", digest(url))), html).unwrap();
+        }
+
+        let report = fetch(&workdir, None).unwrap();
+        assert_eq!(report.uncertain_discoveries, 3);
+        assert_eq!(report.eligible_releases, 2);
+        assert_eq!(report.selected, 2);
+        assert_eq!(report.cached, 2);
+        assert_eq!(report.wellbore_links, 3);
+        let releases = fs::read_to_string(workdir.csv_dir().join(RELEASE_OUTPUT)).unwrap();
+        assert!(!releases.contains(certain_url));
+        assert!(releases.contains(shared_url));
+        assert!(releases.contains(missing_url));
     }
 }

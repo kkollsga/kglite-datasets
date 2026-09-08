@@ -77,7 +77,8 @@ def open(  # noqa: A001
     :param workers: concurrent CSV fetches (default 10).
     :param force_rebuild: skip the disk-mode cache short-circuit.
     :param include_press_releases: fetch document text, store it as
-        Markdown, and extract candidate volume mentions before building.
+        Markdown, and extract candidate volume mentions for discoveries whose
+        selected structured volumetrics remain uncertain.
     :param press_release_limit: maximum distinct press-release URLs to
         process. Intended for bounded pilots; ``None`` processes all.
     :param verbose: print a fetch + build summary.
@@ -183,7 +184,7 @@ def fetch_press_releases(
     limit: int | None = None,
     verbose: bool = True,
 ) -> dict[str, int]:
-    """Fetch press releases referenced by an existing ``wellbore.csv``.
+    """Fetch releases for discoveries with uncertain structured volumetrics.
 
     Source documents are cached under ``workdir/press_releases/raw``.
     Graph-facing CSVs store the Markdown text, links to wellbores, and
@@ -196,6 +197,7 @@ def fetch_press_releases(
     if verbose:
         print(
             "  Press releases: "
+            f"{report['eligible_releases']} eligible, "
             f"{report['parsed']} parsed, {report['failed']} failed, "
             f"{report['volume_mentions']} volume mentions "
             f"from {report['documents']} documents."
