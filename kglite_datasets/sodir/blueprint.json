@@ -578,6 +578,12 @@
               "lsuBottomDepth",
               "lsuLevel"
             ]
+          },
+          "HAS_PRESS_RELEASE": {
+            "csv": "csv/_derived_wellbore_press_release.csv",
+            "source_fk": "wlbNpdidWellbore",
+            "target": "PressRelease",
+            "target_fk": "pressReleaseId"
           }
         }
       },
@@ -954,6 +960,50 @@
               "OF_WELLBORE": {
                 "target": "Wellbore",
                 "fk": "wlbNpdidWellbore"
+              }
+            }
+          }
+        }
+      }
+    },
+    "PressRelease": {
+      "csv": "csv/_derived_press_release.csv",
+      "pk": "pressReleaseId",
+      "title": "title",
+      "properties": {
+        "sourceUrl": "string",
+        "sourceFormat": "string",
+        "markdown": "string",
+        "contentSha256": "string",
+        "fetchStatus": "string",
+        "fetchError": "string"
+      },
+      "sub_nodes": {
+        "PressReleaseVolume": {
+          "csv": "csv/_derived_press_release_volume.csv",
+          "pk": "volumeMentionId",
+          "title": "sourceText",
+          "parent_fk": "pressReleaseId",
+          "properties": {
+            "mentionIndex": "int",
+            "minimum": "float",
+            "maximum": "float",
+            "value": "float",
+            "bound": "string",
+            "unit": "string",
+            "commodity": "string",
+            "scope": "string",
+            "estimateStatus": "string",
+            "sourceText": "string"
+          },
+          "skipped": [
+            "pressReleaseId"
+          ],
+          "connections": {
+            "fk_edges": {
+              "OF_PRESS_RELEASE": {
+                "target": "PressRelease",
+                "fk": "pressReleaseId"
               }
             }
           }

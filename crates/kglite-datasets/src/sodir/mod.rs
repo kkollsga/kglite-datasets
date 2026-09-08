@@ -38,6 +38,7 @@ pub mod layout;
 pub mod orchestrator;
 pub mod play_examples;
 pub mod preprocess;
+pub mod press_releases;
 pub mod volume;
 
 pub use blueprint::{datasets_used_by_blueprint, merge_blueprint_json};

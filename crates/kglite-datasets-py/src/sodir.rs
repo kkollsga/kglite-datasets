@@ -17,7 +17,7 @@ use pyo3::types::{PyDict, PyModule};
 use pyo3::wrap_pyfunction;
 
 use kglite_datasets::sodir::{
-    datasets_used_by_blueprint, fetch_all_with_enhancement, SodirError, Workdir,
+    datasets_used_by_blueprint, fetch_all_with_enhancement, press_releases, SodirError, Workdir,
 };
 
 fn map_err(e: SodirError) -> PyErr {
@@ -61,6 +61,9 @@ fn refresh(
                 && stem != "_derived_discovery_play_candidate"
                 && stem != "_derived_field_play"
                 && stem != "_derived_discovery_volume"
+                && stem != "_derived_press_release"
+                && stem != "_derived_press_release_volume"
+                && stem != "_derived_wellbore_press_release"
         });
     }
 
@@ -140,6 +143,32 @@ fn refresh(
     Ok(d.into())
 }
 
+/// Fetch, cache and normalize the distinct press releases referenced by
+/// `wellbore.csv`. `limit` is intended for bounded pilots; `None` processes
+/// every distinct URL.
+#[pyfunction]
+#[pyo3(signature = (workdir, limit=None))]
+fn fetch_press_releases(
+    py: Python<'_>,
+    workdir: String,
+    limit: Option<usize>,
+) -> PyResult<Py<PyDict>> {
+    let wd = Workdir::new(workdir);
+    let report = py
+        .detach(|| press_releases::fetch(&wd, limit))
+        .map_err(map_err)?;
+    let d = PyDict::new(py);
+    d.set_item("selected", report.selected)?;
+    d.set_item("fetched", report.fetched)?;
+    d.set_item("cached", report.cached)?;
+    d.set_item("parsed", report.parsed)?;
+    d.set_item("failed", report.failed)?;
+    d.set_item("documents", report.documents)?;
+    d.set_item("wellbore_links", report.wellbore_links)?;
+    d.set_item("volume_mentions", report.volume_mentions)?;
+    Ok(d.into())
+}
+
 /// Deep-merge a base blueprint with an optional complement, returning
 /// the merged blueprint as a JSON string. Base wins on leaf collisions
 /// unless `complement_overrides`.
@@ -199,6 +228,7 @@ fn enhancement_version() -> u32 {
 pub fn register(py: Python<'_>, parent: &Bound<'_, PyModule>) -> PyResult<()> {
     let m = PyModule::new(py, "_sodir_internal")?;
     m.add_function(wrap_pyfunction!(refresh, &m)?)?;
+    m.add_function(wrap_pyfunction!(fetch_press_releases, &m)?)?;
     m.add_function(wrap_pyfunction!(merge_blueprint, &m)?)?;
     m.add_function(wrap_pyfunction!(datasets_for_blueprint, &m)?)?;
     m.add_function(wrap_pyfunction!(graph_dir, &m)?)?;

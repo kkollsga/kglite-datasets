@@ -24,6 +24,13 @@ g.cypher(
     "MATCH (d:Discovery)-[r:IN_PLAY]->(p:Play) "
     "RETURN d.title, p.title, r.match_method, r.distance_m, r.matched_ages"
 )
+
+# Optional document enrichment. Start with a bounded batch while exploring:
+g = sodir.open(
+    workdir,
+    include_press_releases=True,
+    press_release_limit=15,
+)
 ```
 
 Layout managed under `workdir`:
@@ -32,6 +39,7 @@ Layout managed under `workdir`:
 workdir/
     sodir_index.json          # fetch manifest (per-dataset row count, timestamps)
     csv/                      # cached CSVs, flat (field.csv, wellbore.csv, ...)
+    press_releases/raw/       # cached source PDFs and HTML
     graph/                    # disk graph dir built from the CSVs
 ```
 
@@ -98,6 +106,32 @@ g.cypher(
 )
 ```
 
+## Press releases and volume evidence
+
+Set `include_press_releases=True` on `open()` or `fetch_all()` to fetch the
+distinct release URLs referenced by `wellbore.csv`. For an existing workdir,
+`sodir.fetch_press_releases(workdir, limit=15)` runs only the document pass.
+The source response is cached, the article is stored as Markdown on a
+`PressRelease` node, and `Wellbore -[:HAS_PRESS_RELEASE]-> PressRelease`
+preserves the source association.
+
+`PressReleaseVolume` children record number-unit expressions such as
+`3–5 million Sm3` or `15–30 billion Sm3`, together with commodity, scope,
+qualifier, and the complete source sentence. Production rates are excluded.
+Discovery-specific estimates, combined-area totals, and otherwise unspecified
+mentions remain distinguishable. These rows are document evidence, not a
+replacement for the structured `DiscoveryVolume` hierarchy: inspect `scope`
+and `sourceText` before using a mention in an aggregate.
+
+```python
+g.cypher(
+    "MATCH (w:Wellbore)-[:HAS_PRESS_RELEASE]->(p:PressRelease) "
+    "MATCH (v:PressReleaseVolume)-[:OF_PRESS_RELEASE]->(p) "
+    "RETURN w.title, v.minimum, v.maximum, v.value, v.unit, "
+    "v.commodity, v.scope, v.sourceText"
+)
+```
+
 ## What the blueprint deliberately leaves out
 
 Sodir publishes ~150 datasets; the shipped blueprint loads 103 of them, and
@@ -118,8 +152,9 @@ Four tables are fetched by nothing:
 Columns omitted from source-node properties: ArcGIS bookkeeping (`OBJECTID`, a
 sequential row counter; `SHAPE`, a duplicate of `_geometry`; the computed
 `Shape__Area` / `Shape__Length`, derivable from the WKT), the `*FactPageUrl` /
-`*FactMapUrl` / `*PressReleaseUrl` links back to Sodir's own web pages, and the
-internal `*GUID` identifiers. Derived volume provenance retains exact source
+`*FactMapUrl` links back to Sodir's own web pages and the internal `*GUID`
+identifiers. `wlbPressReleaseUrl` is retained because it is the source for the
+optional document graph. Derived volume provenance retains exact source
 rows, including their identifiers, so the original records can be traced.
 
 Columns dropped from `wellbore.csv` and `facility.csv`: the DMS

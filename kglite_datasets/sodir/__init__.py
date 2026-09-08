@@ -10,6 +10,7 @@ lifecycle on the client side.
 Public API:
     open(workdir, ...)       -> KnowledgeGraph    # full lifecycle
     fetch_all(workdir, ...)  -> dict              # CSVs only
+    fetch_press_releases(...) -> dict             # optional document enrichment
 
 Layout managed under ``workdir``:
 
@@ -25,6 +26,6 @@ Layout managed under ``workdir``:
             ...
 """
 
-from .wrapper import fetch_all, open, remove_complement
+from .wrapper import fetch_all, fetch_press_releases, open, remove_complement
 
-__all__ = ["open", "fetch_all", "remove_complement"]
+__all__ = ["open", "fetch_all", "fetch_press_releases", "remove_complement"]

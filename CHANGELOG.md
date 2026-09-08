@@ -8,6 +8,13 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 
 ### Added
 
+- Sodir can now fetch the distinct wellbore press releases on demand, cache
+  their raw PDF or HTML source, store article text as Markdown, and link each
+  `PressRelease` to every referenced `Wellbore`. Conservative
+  `PressReleaseVolume` evidence rows extract adjacent number-unit expressions,
+  reject production rates, classify commodity and scope, and retain the source
+  sentence. A bounded `press_release_limit` supports exploratory batches.
+
 - `DiscoveryVolume` now uses a simple source hierarchy: the latest structured
   `FieldReserves` snapshot is primary for every associated discovery, with one
   shared aggregation key that consumers deduplicate within a play. Only

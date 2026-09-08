@@ -52,6 +52,8 @@ def open(  # noqa: A001
     complement_overrides: bool = False,
     workers: int = DEFAULT_WORKERS,
     force_rebuild: bool = False,
+    include_press_releases: bool = False,
+    press_release_limit: int | None = None,
     verbose: bool = True,
 ) -> KnowledgeGraph:
     """Return a KGLite graph backed by Sodir FactMaps data, fetching
@@ -74,6 +76,10 @@ def open(  # noqa: A001
     :param dataset_cooldown_days: hard-refresh cadence (default 30).
     :param workers: concurrent CSV fetches (default 10).
     :param force_rebuild: skip the disk-mode cache short-circuit.
+    :param include_press_releases: fetch document text, store it as
+        Markdown, and extract candidate volume mentions before building.
+    :param press_release_limit: maximum distinct press-release URLs to
+        process. Intended for bounded pilots; ``None`` processes all.
     :param verbose: print a fetch + build summary.
     """
     if storage not in ("disk", "memory"):
@@ -87,7 +93,7 @@ def open(  # noqa: A001
 
     # Disk-mode short-circuit: an existing graph within the hard cooldown.
     graph_dir = workdir / GRAPH_SUBDIR
-    if storage == "disk" and not force_rebuild:
+    if storage == "disk" and not force_rebuild and not include_press_releases:
         age = _sodir_internal.disk_graph_age_days(str(workdir))
         if age is not None and age < dataset_cooldown_days and _cached_blueprint_matches(graph_dir, merged_json):
             if verbose:
@@ -112,6 +118,9 @@ def open(  # noqa: A001
     )
     if verbose:
         _print_refresh_summary(report)
+    if include_press_releases:
+        press_report = fetch_press_releases(workdir, limit=press_release_limit, verbose=verbose)
+        report["press_releases"] = press_report
 
     blueprint = json.loads(merged_json)
     if storage == "memory":
@@ -138,6 +147,8 @@ def fetch_all(
     use_complement: bool = True,
     complement_overrides: bool = False,
     workers: int = DEFAULT_WORKERS,
+    include_press_releases: bool = False,
+    press_release_limit: int | None = None,
     verbose: bool = True,
 ) -> dict[str, dict]:
     """Refresh CSVs and return the index entry for each needed dataset.
@@ -157,11 +168,39 @@ def fetch_all(
     )
     if verbose:
         _print_refresh_summary(report)
+    if include_press_releases:
+        fetch_press_releases(workdir, limit=press_release_limit, verbose=verbose)
 
     needed = _sodir_internal.datasets_for_blueprint(merged_json)
     index_path = workdir / INDEX_FILE
     datasets = json.loads(index_path.read_text(encoding="utf-8")).get("datasets", {}) if index_path.exists() else {}
     return {stem: datasets[stem] for stem in needed if stem in datasets}
+
+
+def fetch_press_releases(
+    workdir: str | Path,
+    *,
+    limit: int | None = None,
+    verbose: bool = True,
+) -> dict[str, int]:
+    """Fetch press releases referenced by an existing ``wellbore.csv``.
+
+    Source documents are cached under ``workdir/press_releases/raw``.
+    Graph-facing CSVs store the Markdown text, links to wellbores, and
+    conservative volume mentions with their source sentence. A mention is
+    evidence from the release; it is not automatically accepted as an
+    authoritative discovery reserve.
+    """
+    workdir = Path(workdir).resolve()
+    report = dict(_sodir_internal.fetch_press_releases(str(workdir), limit=limit))
+    if verbose:
+        print(
+            "  Press releases: "
+            f"{report['parsed']} parsed, {report['failed']} failed, "
+            f"{report['volume_mentions']} volume mentions "
+            f"from {report['documents']} documents."
+        )
+    return report
 
 
 def remove_complement(workdir: str | Path) -> bool:

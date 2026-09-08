@@ -40,6 +40,9 @@ sha2 = "0.10"
 chrono = { version = "0.4.43", features = ["serde"] }
 regex = "1"
 rayon = "1.10"
+pdf-extract = "0.12"
+quick_html2md = "0.2"
+scraper = "0.27"
 # ureq 2 default features give rustls TLS + auto gzip; `json` adds the
 # serde_json body helpers sodir's fetch_json uses.
 ureq = { version = "2", features = ["json"] }
