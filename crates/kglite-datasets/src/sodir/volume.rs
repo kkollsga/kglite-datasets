@@ -184,7 +184,7 @@ fn project_discovery(
     }
 
     let root_has_volume = discovery_snapshots.contains_key(&discovery.root);
-    if is_earliest && !root_has_volume {
+    if is_earliest {
         if let Some(snapshot) = discovery
             .field
             .as_ref()
@@ -207,8 +207,6 @@ fn project_discovery(
 
     let reason = if discovery.id != discovery.root && root_has_volume {
         "included_in_reporting_discovery"
-    } else if is_earliest && root_has_volume {
-        "field_total_unused_discovery_volume_exists"
     } else {
         "no_structured_volume"
     };
@@ -911,6 +909,44 @@ mod tests {
         assert_eq!(rows[1]["unresolved_reason"], "later_field_discovery");
         assert!(rows[1]["recoverable_oil"].is_empty());
         assert!(rows[1]["source_record_json"].is_empty());
+    }
+
+    #[test]
+    fn redirected_earliest_discovery_uses_field_fallback_not_later_root_volume() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            tmp.path(),
+            "discovery.csv",
+            "dscNpdidDiscovery,dscNpdidResInclInDisc,dscDateFromInclInField,fldNpdidField\n1,2,2000-01-01,10\n2,,2001-01-01,10\n",
+        );
+        write(
+            tmp.path(),
+            "discovery_reserves.csv",
+            "dscNpdidDiscovery,dscDateOffResEstDisplay,dscRecoverableOil\n2,2025-12-31,6\n",
+        );
+        write(
+            tmp.path(),
+            "field_reserves.csv",
+            "fldNpdidField,fldDateOffResEstDisplay,fldRecoverableOil\n10,2025-12-31,9\n",
+        );
+
+        let report = apply(tmp.path()).unwrap();
+        let rows = rows(tmp.path());
+        assert_eq!(
+            report,
+            VolumeReport {
+                discovery: 0,
+                field_fallback: 1,
+                null: 1
+            }
+        );
+        assert_eq!(rows[0]["dscNpdidDiscovery"], "1");
+        assert_eq!(rows[0]["method"], "field_reserves_fallback");
+        assert_eq!(rows[0]["recoverable_oil"], "9");
+        assert_eq!(rows[1]["dscNpdidDiscovery"], "2");
+        assert_eq!(rows[1]["method"], "no_volume");
+        assert_eq!(rows[1]["unresolved_reason"], "later_field_discovery");
+        assert!(rows[1]["recoverable_oil"].is_empty());
     }
 
     #[test]
