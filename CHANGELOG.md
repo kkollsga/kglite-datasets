@@ -4,6 +4,51 @@ All notable changes to kglite-datasets are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project adheres to
 semantic versioning (workspace version in the root `Cargo.toml`).
 
+## [Unreleased]
+
+### Changed
+
+- Raised the Python runtime, development, and CI floor from `kglite>=0.16.22`
+  to `kglite>=0.17.1` (both matrix legs move in lockstep; `0.17.1` ships wheels
+  for both runners). **This is not a routine tracking bump — below 0.17.0 the
+  SEC graph we ship is missing a third of its edges.** Our
+  `sec/blueprint.json` `calendar` step declares `in_month_edge: IN_MONTH` and
+  `in_quarter_edge: IN_QUARTER`; every engine up to and including 0.16.22 built
+  the 456 `Month` and 152 `Quarter` nodes and then built **no edges into
+  them** — silently, with no warning and a successful build report. kglite
+  0.17.0 fixed it ("Calendar hierarchy relationships load correctly, and
+  multiple calendars retain their shared Month/Quarter nodes"). A floor that
+  still admitted 0.16.22 would advertise support for an engine that hands the
+  user a different graph, so it moves.
+- **Measured, not reasoned about.** A property-level diff of the built SEC
+  graph on 0.16.22 vs 0.17.1 — every node with `properties(n)`, every edge with
+  its endpoints and `properties(r)` — gives **14,494 identical nodes with zero
+  property differences and zero edges lost**; the only change is **+27,758
+  edges**, exactly `IN_MONTH` (13,879) and `IN_QUARTER` (13,879), each linking a
+  `Day` to its own period (`2012-12-24 -> 2012-12`, `2021-07-09 -> 2021-Q3`).
+  Total edges 13,887 -> 41,645. The built-graph golden
+  (`tests/goldens/sec-graph-build.sha256`) is re-frozen onto that corrected
+  topology, and a new floor guard —
+  `test_graph_build_golden.py::test_calendar_hierarchy_is_linked` — asserts
+  every `Day` reaches its own `Month` and `Quarter`, checking the *pairing* and
+  not only the count. It was confirmed red on 0.16.22 (the engine itself
+  reports `MATCH references unknown relationship type 'IN_MONTH'`) and green on
+  0.17.1, so the re-freeze is protected by a test that states why the digest
+  moved.
+- **Existing caches keep the old graph until you rebuild.** A cache hit
+  re-opens the saved graph rather than rebuilding it, and nothing stamps the
+  engine version into a cache, so a SEC workdir built on an older kglite still
+  serves the calendar-less graph after this upgrade. Pass `force_rebuild=True`
+  once (or delete the workdir's `graph*/`) to pick up the hierarchy. Sodir and
+  Wikidata are unaffected — neither blueprint has a `calendar` step.
+- No Rust compile break and no Rust change: no workspace member links the
+  `kglite` crate, so 0.17's API moves (`compute_description` taking a
+  `DescribeRequest`, the `load_rdf` fresh-graph restriction) cannot reach us.
+  The Python surface we use is `from_blueprint`, `KnowledgeGraph`, `load`,
+  `save` and `load_ntriples`; 0.17's query-parameter, DataFrame-dtype,
+  transaction-lifetime and `close()` changes touch none of it, and both
+  Wikidata builds already load N-Triples into a fresh graph.
+
 ## [0.1.15] - 2026-09-03
 
 ### Changed

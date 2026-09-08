@@ -11,13 +11,17 @@ So this gate freezes the shape of the graph the user actually receives, and
 exercises the create-then-reopen path the SEC wrapper depends on
 (``_build_graph`` -> ``save`` -> ``_load_cached_graph``).
 
-Verified identical across kglite 0.13.0, 0.14.5, 0.15.0, 0.15.6, 0.15.7,
-0.15.8, 0.16.5, 0.16.6, 0.16.7, 0.16.9, 0.16.12, 0.16.13, 0.16.15, 0.16.16,
-0.16.17, 0.16.18, 0.16.19, 0.16.20, and 0.16.22 (last checked 2026-09-03) — the digest
-is engine-version-stable by construction: it covers node/edge topology, not
-serialization bytes. The ``.kgl`` file *size* deliberately is **not** asserted;
-it legitimately changed between 0.13 and 0.14 (153457 -> 149087 bytes) with
-identical graph content.
+Verified identical across kglite 0.13.0 through 0.16.22, and re-frozen once at
+0.17.1 (last checked 2026-09-08). The digest covers node/edge topology, not
+serialization bytes, so an engine upgrade moves it only when the graph itself
+moves — and 0.17.0 moved it for a reason the gate is meant to catch: the
+``calendar`` step's ``IN_MONTH``/``IN_QUARTER`` edges were never built below
+0.17.0, so the frozen shape gained 27,758 edges (13,887 -> 41,645) with every
+node, every property and every pre-existing edge unchanged. That is a fixed
+silent edge loss, not a drift, and ``test_calendar_hierarchy_is_linked`` below
+is the guard that states it. The ``.kgl`` file *size* deliberately is **not**
+asserted; it legitimately changed between 0.13 and 0.14 (153457 -> 149087
+bytes) with identical graph content.
 
 One thing was *not* stable by construction until the 0.16.5 bump: the id
 sample used an engine-side ``ORDER BY n.id LIMIT 25``. ``n.id`` is mixed-type
@@ -26,10 +30,8 @@ documented total order, which moved the sample while the graph itself stayed
 byte-identical (same 14494 nodes, same 13887 edges, same id/label and
 (src, type, tgt) sets). The sample is now sliced after the same client-side
 sort the other parts use, so it is the graph's shape being frozen rather than
-the engine's ordering policy — the digest is identical on 0.15.8, 0.16.5,
-0.16.6, 0.16.7, 0.16.9, 0.16.12, 0.16.13, 0.16.15, 0.16.16, 0.16.17,
-0.16.18, 0.16.19, 0.16.20, and 0.16.22 (0.16.6's per-section ``.kgl`` CRCs change
-bytes, not topology).
+the engine's ordering policy — the sample is unchanged from 0.15.8 through
+0.17.1 (0.16.6's per-section ``.kgl`` CRCs change bytes, not topology).
 
 Offline: no network.
 """
@@ -170,3 +172,37 @@ def test_mixed_type_id_ordering_is_whole_and_consistent() -> None:
     )
     assert len(top) == 25, f"LIMIT 25 returned {len(top)} rows over a mixed-type sort key"
     assert top == full[:25], "fused ORDER BY ... LIMIT disagrees with the unlimited ordering"
+
+
+def test_calendar_hierarchy_is_linked() -> None:
+    """Floor guard: every ``Day`` reaches its own ``Month`` and ``Quarter``.
+
+    Our shipped SEC blueprint's ``calendar`` compute step declares
+    ``in_month_edge``/``in_quarter_edge``. Up to and including kglite 0.16.22
+    those two edge sets were **never built**: the 456 ``Month`` and 152
+    ``Quarter`` nodes were created and left with no edge into them, so the
+    graph a user received held 13,887 of the 41,645 edges the blueprint
+    describes — 27,758 missing, no error, no warning. kglite 0.17.0 fixed it
+    ("Calendar hierarchy relationships load correctly"), which is why the floor
+    moves to 0.17.1 and why the built-graph golden was re-frozen.
+
+    Fails on kglite <= 0.16.22 (zero ``IN_MONTH``/``IN_QUARTER`` edges), passes
+    from 0.17.0 — a real floor guard, not a tautology. It also checks the
+    *pairing*, not just the count: a hierarchy wired to the wrong period is the
+    other way this can be wrong, and a count alone cannot see it.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        g = _build_memory_graph(Path(td))
+        days = {r["id"] for r in g.cypher("MATCH (d:Day) RETURN d.id AS id").to_list()}
+        months = g.cypher("MATCH (d:Day)-[:IN_MONTH]->(m:Month) RETURN d.id AS d, m.id AS m").to_list()
+        quarters = g.cypher("MATCH (d:Day)-[:IN_QUARTER]->(q:Quarter) RETURN d.id AS d, q.id AS q").to_list()
+
+    assert days, "guard is only meaningful while the calendar builds Day nodes; the blueprint changed"
+    assert len(months) == len(days), f"{len(months)} IN_MONTH edges for {len(days)} Day nodes"
+    assert len(quarters) == len(days), f"{len(quarters)} IN_QUARTER edges for {len(days)} Day nodes"
+
+    def _quarter(day: str) -> str:
+        return f"{day[:4]}-Q{(int(day[5:7]) - 1) // 3 + 1}"
+
+    assert not [r for r in months if r["m"] != r["d"][:7]][:5], "IN_MONTH links a Day to the wrong Month"
+    assert not [r for r in quarters if r["q"] != _quarter(r["d"])][:5], "IN_QUARTER links a Day to the wrong Quarter"
