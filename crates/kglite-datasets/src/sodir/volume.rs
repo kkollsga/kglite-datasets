@@ -67,10 +67,11 @@ struct DiscoverySet {
 
 /// Rebuild one `DiscoveryVolume` row per discovery.
 ///
-/// A latest structured discovery snapshot wins. Otherwise the latest field
-/// snapshot is assigned only to the field's earliest discovery. Redirected
-/// discoveries never copy the reporting root's values, and every remaining
-/// discovery receives an explicit row with null components.
+/// For a field, only its earliest included discovery can receive volume: its
+/// latest structured discovery snapshot wins, otherwise the latest field
+/// snapshot is used. Unfielded discoveries can use their structured snapshot.
+/// Redirected discoveries never copy the reporting root's values, and every
+/// remaining discovery receives an explicit row with null components.
 pub fn apply(csv_dir: &Path) -> Result<VolumeReport> {
     let discovery_path = csv_dir.join("discovery.csv");
     if !discovery_path.is_file() {
@@ -85,17 +86,11 @@ pub fn apply(csv_dir: &Path) -> Result<VolumeReport> {
         discovery_snapshots(&reserve_rows, &discoveries.redirects, &discoveries.ids);
     let field_snapshots = field_snapshots(&field_rows);
     let earliest = earliest_by_field(&discoveries.rows);
-    let roots_with_discovery_volume: BTreeSet<&str> = discovery_snapshots
-        .keys()
-        .filter(|root| discoveries.ids.contains(*root))
-        .map(String::as_str)
-        .collect();
     let (output, report) = project_volumes(
         &discoveries.rows,
         &discovery_snapshots,
         &field_snapshots,
         &earliest,
-        &roots_with_discovery_volume,
     );
 
     write_rows(&csv_dir.join(OUTPUT), &output)?;
@@ -139,18 +134,12 @@ fn project_volumes(
     discovery_snapshots: &BTreeMap<String, Snapshot>,
     field_snapshots: &BTreeMap<String, Snapshot>,
     earliest: &BTreeMap<String, String>,
-    roots_with_discovery_volume: &BTreeSet<&str>,
 ) -> (Vec<Vec<String>>, VolumeReport) {
     let mut output = Vec::with_capacity(discoveries.len());
     let mut report = VolumeReport::default();
     for discovery in discoveries {
-        let (row, source) = project_discovery(
-            discovery,
-            discovery_snapshots,
-            field_snapshots,
-            earliest,
-            roots_with_discovery_volume,
-        );
+        let (row, source) =
+            project_discovery(discovery, discovery_snapshots, field_snapshots, earliest);
         match source {
             VolumeSource::Discovery => report.discovery += 1,
             VolumeSource::FieldFallback => report.field_fallback += 1,
@@ -166,8 +155,17 @@ fn project_discovery(
     discovery_snapshots: &BTreeMap<String, Snapshot>,
     field_snapshots: &BTreeMap<String, Snapshot>,
     earliest: &BTreeMap<String, String>,
-    roots_with_discovery_volume: &BTreeSet<&str>,
 ) -> (Vec<String>, VolumeSource) {
+    let is_earliest = discovery.field.as_ref().is_some_and(|field| {
+        earliest.get(field).map(String::as_str) == Some(discovery.id.as_str())
+    });
+    if discovery.field.is_some() && !is_earliest {
+        return (
+            null_row(discovery, "later_field_discovery"),
+            VolumeSource::Null,
+        );
+    }
+
     if discovery.id == discovery.root {
         if let Some(snapshot) = discovery_snapshots.get(&discovery.root) {
             return (
@@ -185,10 +183,7 @@ fn project_discovery(
         }
     }
 
-    let is_earliest = discovery.field.as_ref().is_some_and(|field| {
-        earliest.get(field).map(String::as_str) == Some(discovery.id.as_str())
-    });
-    let root_has_volume = roots_with_discovery_volume.contains(discovery.root.as_str());
+    let root_has_volume = discovery_snapshots.contains_key(&discovery.root);
     if is_earliest && !root_has_volume {
         if let Some(snapshot) = discovery
             .field
@@ -212,8 +207,6 @@ fn project_discovery(
 
     let reason = if discovery.id != discovery.root && root_has_volume {
         "included_in_reporting_discovery"
-    } else if discovery.field.is_some() && !is_earliest {
-        "later_field_discovery"
     } else if is_earliest && root_has_volume {
         "field_total_unused_discovery_volume_exists"
     } else {
@@ -884,6 +877,43 @@ mod tests {
     }
 
     #[test]
+    fn direct_volume_on_later_field_discovery_is_explicitly_null() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            tmp.path(),
+            "discovery.csv",
+            "dscNpdidDiscovery,dscDateFromInclInField,fldNpdidField\n1,2000-01-01,10\n2,2001-01-01,10\n",
+        );
+        write(
+            tmp.path(),
+            "discovery_reserves.csv",
+            "dscNpdidDiscovery,dscDateOffResEstDisplay,dscRecoverableOil\n2,2025-12-31,6\n",
+        );
+        write(
+            tmp.path(),
+            "field_reserves.csv",
+            "fldNpdidField,fldDateOffResEstDisplay,fldRecoverableOil\n10,2025-12-31,9\n",
+        );
+
+        let report = apply(tmp.path()).unwrap();
+        let rows = rows(tmp.path());
+        assert_eq!(
+            report,
+            VolumeReport {
+                discovery: 0,
+                field_fallback: 1,
+                null: 1
+            }
+        );
+        assert_eq!(rows[0]["method"], "field_reserves_fallback");
+        assert_eq!(rows[0]["recoverable_oil"], "9");
+        assert_eq!(rows[1]["method"], "no_volume");
+        assert_eq!(rows[1]["unresolved_reason"], "later_field_discovery");
+        assert!(rows[1]["recoverable_oil"].is_empty());
+        assert!(rows[1]["source_record_json"].is_empty());
+    }
+
+    #[test]
     fn duplicate_field_snapshots_with_different_object_ids_are_not_summed() {
         let tmp = tempfile::tempdir().unwrap();
         write(
@@ -926,10 +956,7 @@ mod tests {
         assert_eq!(rows[0]["recoverable_oe"], "8");
         assert_eq!(rows[1]["method"], "no_volume");
         assert!(rows[1]["recoverable_oe"].is_empty());
-        assert_eq!(
-            rows[1]["unresolved_reason"],
-            "included_in_reporting_discovery"
-        );
+        assert_eq!(rows[1]["unresolved_reason"], "later_field_discovery");
         assert_eq!(rows[2]["method"], "discovery_reserves");
         assert_eq!(rows[2]["recoverable_oe"], "6");
         assert_eq!(rows[3]["method"], "no_volume");

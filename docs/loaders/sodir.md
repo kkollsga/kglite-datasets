@@ -65,19 +65,20 @@ plays overlap and must not be summed into an estate-wide total.
 
 ## Discovery volumes
 
-`DiscoveryVolume` emits exactly one row for every discovery. The latest valid
-`DiscoveryReserves` snapshot is the primary source. Redirected discoveries do
-not copy their reporting root's values: the terminal reporting root holds the
-structured volume once, while included discoveries receive explicit null
-components.
+`DiscoveryVolume` emits exactly one row for every discovery. For discoveries
+assigned to a field, only its earliest included discovery may carry volume. It
+uses its latest valid `DiscoveryReserves` snapshot when present, or the field's
+latest valid `FieldReserves` snapshot as `method=field_reserves_fallback`.
+Every later field discovery remains present as `method=no_volume`,
+`usable=false`, with every volume component null, even when it has its own
+structured discovery-reserves snapshot. The field fallback never shifts to a
+later discovery when the earliest already has direct data; the field total is
+unused in that case. A discovery without a field may still use its own latest
+valid structured volume. Numeric zero remains a reported value.
 
-When a field has no discovery volume for its earliest discovery, that one
-discovery receives the latest valid `FieldReserves` snapshot as
-`method=field_reserves_fallback`. The fallback never moves to a later discovery,
-even when the earliest discovery already has its own volume; in that case the
-field total is unused. Later field discoveries without their own structured
-volume remain present as `method=no_volume`, `usable=false`, with every volume
-component null. Numeric zero remains a reported value.
+Redirected discoveries do not copy their reporting root's values: the terminal
+reporting root holds a selected structured volume once, while included
+discoveries receive explicit null components.
 
 Duplicate latest snapshots with different bookkeeping IDs are collapsed by
 their component values (and by resource class for discovery rows), so they are

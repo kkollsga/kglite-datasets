@@ -8,15 +8,16 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 
 ### Added
 
-- `DiscoveryVolume` now emits one non-duplicating row per discovery. A latest
-  structured discovery snapshot is primary and is attached once to its terminal
-  reporting root. Otherwise the latest field snapshot is assigned only to the
-  field's earliest discovery; it never shifts to a later discovery when the
-  earliest already has direct data. Later and redirected discoveries retain
-  explicit null components. Current and historical field-inclusion dates choose
-  the earliest member, with designated-well completion, discovery-year and
-  discovery-ID fallbacks. Missing components stay null and finite numeric zero
-  stays reported.
+- `DiscoveryVolume` now emits one non-duplicating row per discovery. For a
+  field, only its earliest included discovery may carry volume: its latest
+  structured discovery snapshot is primary, otherwise the latest field snapshot
+  is used. Every later field discovery has explicit null components even when a
+  structured discovery snapshot exists, and the field fallback never shifts.
+  Unfielded discoveries may still use their own structured volume. Redirected
+  values attach once to their terminal reporting root. Current and historical
+  field-inclusion dates choose the earliest member, with designated-well
+  completion, discovery-year and discovery-ID fallbacks. Missing components
+  stay null and finite numeric zero stays reported.
 
 - Sodir now assigns every matching `Discovery -[:IN_PLAY]-> Play`
   relationship. Published discovery examples are authoritative, and all
