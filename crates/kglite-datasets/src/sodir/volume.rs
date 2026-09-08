@@ -86,11 +86,14 @@ pub fn apply(csv_dir: &Path) -> Result<VolumeReport> {
         discovery_snapshots(&reserve_rows, &discoveries.redirects, &discoveries.ids);
     let field_snapshots = field_snapshots(&field_rows);
     let earliest = earliest_by_field(&discoveries.rows);
+    let eligible_roots =
+        eligible_discovery_roots(&discoveries.rows, &discovery_snapshots, &earliest);
     let (output, report) = project_volumes(
         &discoveries.rows,
         &discovery_snapshots,
         &field_snapshots,
         &earliest,
+        &eligible_roots,
     );
 
     write_rows(&csv_dir.join(OUTPUT), &output)?;
@@ -134,12 +137,18 @@ fn project_volumes(
     discovery_snapshots: &BTreeMap<String, Snapshot>,
     field_snapshots: &BTreeMap<String, Snapshot>,
     earliest: &BTreeMap<String, String>,
+    eligible_roots: &BTreeSet<String>,
 ) -> (Vec<Vec<String>>, VolumeReport) {
     let mut output = Vec::with_capacity(discoveries.len());
     let mut report = VolumeReport::default();
     for discovery in discoveries {
-        let (row, source) =
-            project_discovery(discovery, discovery_snapshots, field_snapshots, earliest);
+        let (row, source) = project_discovery(
+            discovery,
+            discovery_snapshots,
+            field_snapshots,
+            earliest,
+            eligible_roots,
+        );
         match source {
             VolumeSource::Discovery => report.discovery += 1,
             VolumeSource::FieldFallback => report.field_fallback += 1,
@@ -155,10 +164,9 @@ fn project_discovery(
     discovery_snapshots: &BTreeMap<String, Snapshot>,
     field_snapshots: &BTreeMap<String, Snapshot>,
     earliest: &BTreeMap<String, String>,
+    eligible_roots: &BTreeSet<String>,
 ) -> (Vec<String>, VolumeSource) {
-    let is_earliest = discovery.field.as_ref().is_some_and(|field| {
-        earliest.get(field).map(String::as_str) == Some(discovery.id.as_str())
-    });
+    let is_earliest = is_earliest_in_field(discovery, earliest);
     if discovery.field.is_some() && !is_earliest {
         return (
             null_row(discovery, "later_field_discovery"),
@@ -183,8 +191,8 @@ fn project_discovery(
         }
     }
 
-    let root_has_volume = discovery_snapshots.contains_key(&discovery.root);
-    if is_earliest {
+    let root_will_emit_volume = eligible_roots.contains(&discovery.root);
+    if is_earliest && !root_will_emit_volume {
         if let Some(snapshot) = discovery
             .field
             .as_ref()
@@ -205,12 +213,35 @@ fn project_discovery(
         }
     }
 
-    let reason = if discovery.id != discovery.root && root_has_volume {
+    let reason = if discovery.id != discovery.root && root_will_emit_volume {
         "included_in_reporting_discovery"
     } else {
         "no_structured_volume"
     };
     (null_row(discovery, reason), VolumeSource::Null)
+}
+
+fn eligible_discovery_roots(
+    discoveries: &[Discovery],
+    snapshots: &BTreeMap<String, Snapshot>,
+    earliest: &BTreeMap<String, String>,
+) -> BTreeSet<String> {
+    discoveries
+        .iter()
+        .filter(|discovery| {
+            discovery.id == discovery.root
+                && snapshots.contains_key(&discovery.id)
+                && (discovery.field.is_none() || is_earliest_in_field(discovery, earliest))
+        })
+        .map(|discovery| discovery.id.clone())
+        .collect()
+}
+
+fn is_earliest_in_field(discovery: &Discovery, earliest: &BTreeMap<String, String>) -> bool {
+    discovery
+        .field
+        .as_ref()
+        .is_some_and(|field| earliest.get(field).map(String::as_str) == Some(discovery.id.as_str()))
 }
 
 fn chronology(
@@ -947,6 +978,47 @@ mod tests {
         assert_eq!(rows[1]["method"], "no_volume");
         assert_eq!(rows[1]["unresolved_reason"], "later_field_discovery");
         assert!(rows[1]["recoverable_oil"].is_empty());
+    }
+
+    #[test]
+    fn redirected_earliest_is_null_when_unfielded_root_can_emit_direct_volume() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            tmp.path(),
+            "discovery.csv",
+            "dscNpdidDiscovery,dscNpdidResInclInDisc,dscDateFromInclInField,fldNpdidField\n1,2,2000-01-01,10\n2,,,\n",
+        );
+        write(
+            tmp.path(),
+            "discovery_reserves.csv",
+            "dscNpdidDiscovery,dscDateOffResEstDisplay,dscRecoverableOil\n2,2025-12-31,6\n",
+        );
+        write(
+            tmp.path(),
+            "field_reserves.csv",
+            "fldNpdidField,fldDateOffResEstDisplay,fldRecoverableOil\n10,2025-12-31,9\n",
+        );
+
+        let report = apply(tmp.path()).unwrap();
+        let rows = rows(tmp.path());
+        assert_eq!(
+            report,
+            VolumeReport {
+                discovery: 1,
+                field_fallback: 0,
+                null: 1
+            }
+        );
+        assert_eq!(rows[0]["dscNpdidDiscovery"], "1");
+        assert_eq!(rows[0]["method"], "no_volume");
+        assert_eq!(
+            rows[0]["unresolved_reason"],
+            "included_in_reporting_discovery"
+        );
+        assert!(rows[0]["recoverable_oil"].is_empty());
+        assert_eq!(rows[1]["dscNpdidDiscovery"], "2");
+        assert_eq!(rows[1]["method"], "discovery_reserves");
+        assert_eq!(rows[1]["recoverable_oil"], "6");
     }
 
     #[test]
