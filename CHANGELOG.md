@@ -46,6 +46,18 @@ semantic versioning (workspace version in the root `Cargo.toml`).
   `file` (node spec and junction edge) with the 0.16.23 blueprint
   input-formats work. Neither shipped blueprint uses them; the gate's own
   claim to mirror the engine at the declared floor is what moved.
+- **Build cost, release profile, Apple M4, 7 cold builds per cell (a build is
+  a once-per-event cost, so the headline is the mean of events).** The shipped
+  SEC synthetic build goes 28.43 ms -> 39.41/40.17 ms across two agreeing
+  0.17.1 runs, and the `.kgl` 102,297 -> 134,749 bytes. That is a
+  **correctness cost, not a regression**: it buys 3.0x the edges (13,887 ->
+  41,645), and the cost *per edge* improves in both routes — 2.05 -> 0.96 us
+  and 7.37 -> 3.24 bytes. A same-work control settles the engine question:
+  rebuilt with `in_month_edge`/`in_quarter_edge` removed so both versions emit
+  byte-comparable output (13,886 nodes, 13,887 edges), 0.16.22 -> 0.17.1 is
+  23.58 -> 25.76 ms (+9.2%) with the `.kgl` flat at +0.1% — inside the 20%
+  gate. The unchanged-path machine-drift control, our own Rust extract, ran at
+  0.75x its frozen baseline median (gate tolerance 1.5x).
 - No Rust compile break and no Rust change: no workspace member links the
   `kglite` crate, so 0.17's API moves (`compute_description` taking a
   `DescribeRequest`, the `load_rdf` fresh-graph restriction) cannot reach us.
