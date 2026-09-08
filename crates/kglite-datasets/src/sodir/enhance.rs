@@ -10,8 +10,10 @@ use wkt::Wkt;
 use crate::sodir::ages::{self, Compatibility};
 use crate::sodir::error::{Result, SodirError};
 
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 6;
 const OUTPUT: &str = "_derived_discovery_play.csv";
+const CANDIDATE_OUTPUT: &str = "_derived_discovery_play_candidate.csv";
+const FIELD_OUTPUT: &str = "_derived_field_play.csv";
 const EARTH_RADIUS_M: f64 = 6_371_008.8;
 const DISTANCE_TIE_EPSILON_M: f64 = 0.001;
 
@@ -21,6 +23,8 @@ pub struct EnhancementReport {
     pub contained: usize,
     pub nearest: usize,
     pub unmatched: usize,
+    pub candidates: usize,
+    pub field_links: usize,
 }
 
 #[derive(Clone)]
@@ -41,7 +45,7 @@ struct Candidate<'a> {
     play: &'a Play,
     compatibility: Compatibility,
     matched: Vec<ages::AgeAtom>,
-    matched_slots: Vec<usize>,
+    matched_slot: usize,
     distance_m: f64,
 }
 
@@ -55,21 +59,117 @@ pub fn apply(csv_dir: &Path) -> Result<EnhancementReport> {
         if is_owned_output(&output) {
             write_links(&output, &[])?;
         }
+        let candidates = csv_dir.join(CANDIDATE_OUTPUT);
+        if is_owned_table(
+            &candidates,
+            "dscNpdidDiscovery,plyNPDID,wlbNpdidWellbore,rejection_reason,",
+        ) {
+            write_candidates(&candidates, &[])?;
+        }
+        let fields = csv_dir.join(FIELD_OUTPUT);
+        if is_owned_table(&fields, "fldNpdidField,plyNPDID,match_method,inferred,") {
+            write_field_links(&fields, &[])?;
+        }
         return Ok(EnhancementReport::default());
     }
 
     let discoveries = read_records(&discovery_path)?;
     let wells = load_wells(&well_path)?;
     let plays = load_plays(&play_path)?;
+    let play_catalog: BTreeMap<String, String> = read_records(&play_path)?
+        .into_iter()
+        .filter_map(|row| {
+            Some((
+                cell(&row, "plyNPDID")?.to_string(),
+                cell(&row, "plyName")?.to_string(),
+            ))
+        })
+        .collect();
     let mut links = Vec::new();
+    let mut diagnostics = Vec::new();
+    let mut field_links = Vec::new();
     let mut report = EnhancementReport::default();
 
-    for discovery in discoveries {
-        let Some(discovery_id) = cell(&discovery, "dscNpdidDiscovery") else {
+    let mut discovery_groups: BTreeMap<String, Vec<&Row>> = BTreeMap::new();
+    for discovery in &discoveries {
+        if let Some(id) = cell(discovery, "dscNpdidDiscovery") {
+            discovery_groups
+                .entry(id.to_string())
+                .or_default()
+                .push(discovery);
+        } else {
             report.unmatched += 1;
+        }
+    }
+
+    let mut published_by_field: BTreeMap<String, Vec<_>> = BTreeMap::new();
+    for discovery in &discoveries {
+        let (Some(field_id), Some(field_name)) =
+            (cell(discovery, "fldNpdidField"), cell(discovery, "fldName"))
+        else {
             continue;
         };
-        let Some(well_id) = cell(&discovery, "wlbNpdidWellbore") else {
+        let Ok(field_id_number) = field_id.parse::<u64>() else {
+            continue;
+        };
+        published_by_field
+            .entry(field_id.to_string())
+            .or_insert_with(|| {
+                crate::sodir::play_examples::examples_for_field(field_name, field_id_number)
+                    .filter(|example| {
+                        play_catalog
+                            .get(&example.play_id.to_string())
+                            .is_some_and(|name| name == example.play_name)
+                    })
+                    .collect()
+            });
+    }
+    for (field_id, examples) in &published_by_field {
+        for example in examples {
+            field_links.push(vec![
+                field_id.clone(),
+                example.play_id.to_string(),
+                "published_example".into(),
+                "false".into(),
+                example.source_label.into(),
+                example.source_url.into(),
+                example.accessed_on.into(),
+            ]);
+        }
+    }
+
+    for (discovery_id, rows) in discovery_groups {
+        let signatures: std::collections::BTreeSet<_> = rows
+            .iter()
+            .map(|row| {
+                (
+                    cell(row, "wlbNpdidWellbore").unwrap_or_default(),
+                    cell(row, "fldNpdidField").unwrap_or_default(),
+                )
+            })
+            .collect();
+        if signatures.len() != 1 {
+            report.unmatched += 1;
+            diagnostics.push(diagnostic_row(
+                &discovery_id,
+                "",
+                "",
+                "conflicting_discovery_rows",
+            ));
+            continue;
+        }
+        let discovery = rows[0];
+        let field_id = cell(discovery, "fldNpdidField").unwrap_or_default();
+        if let Some(examples) = published_by_field
+            .get(field_id)
+            .filter(|values| values.len() == 1)
+        {
+            let example = examples[0];
+            links.push(direct_link_row(&discovery_id, example));
+            report.links += 1;
+            continue;
+        }
+        let Some(well_id) = cell(discovery, "wlbNpdidWellbore") else {
             report.unmatched += 1;
             continue;
         };
@@ -87,96 +187,198 @@ pub fn apply(csv_dir: &Path) -> Result<EnhancementReport> {
             report.unmatched += 1;
             continue;
         }
-        candidates.sort_by(|a, b| {
-            a.distance_m
-                .total_cmp(&b.distance_m)
-                .then_with(|| stable_id_cmp(&a.play.id, &b.play.id))
-        });
-
-        let contained: Vec<&Candidate<'_>> = candidates
+        let contained = candidates
             .iter()
-            .filter(|candidate| candidate.distance_m <= DISTANCE_TIE_EPSILON_M)
+            .any(|c| c.distance_m <= DISTANCE_TIE_EPSILON_M);
+        candidates.sort_by(|a, b| candidate_cmp(a, b, contained));
+        let winner = &candidates[0];
+        let tied: Vec<_> = candidates
+            .iter()
+            .filter(|c| candidate_cmp(c, winner, contained).is_eq())
             .collect();
-        let has_contained = !contained.is_empty();
-        let selected: Vec<&Candidate<'_>> = if !has_contained {
-            vec![&candidates[0]]
-        } else {
-            contained
-        };
-        let tie_count = if !has_contained {
-            let winner = selected[0];
-            candidates
-                .iter()
-                .filter(|candidate| {
-                    (candidate.distance_m - winner.distance_m).abs() <= DISTANCE_TIE_EPSILON_M
-                })
-                .count()
-        } else {
-            selected.len()
-        };
-
-        for selected in selected {
-            let method = if selected.distance_m <= DISTANCE_TIE_EPSILON_M {
+        if tied.len() == 1 {
+            let method = if contained {
                 report.contained += 1;
                 "contains"
             } else {
                 report.nearest += 1;
                 "nearest"
             };
-            links.push(vec![
-                discovery_id.to_string(),
-                selected.play.id.clone(),
-                well.id.clone(),
-                "sodir_designated_discovery_wellbore".to_string(),
-                method.to_string(),
-                format!("{:.3}", selected.distance_m),
-                compatibility_name(selected.compatibility).to_string(),
-                json_atoms(&selected.matched),
-                serde_json::to_string(&selected.matched_slots).expect("slot list serializes"),
-                json_atoms(&normalized_well_ages(well)),
-                json_atoms(ages::normalize(&selected.play.age).unwrap_or_default()),
-                "local_equirectangular_polygon_boundary".to_string(),
-                "true".to_string(),
-                tie_count.to_string(),
-                (tie_count > 1).to_string(),
-            ]);
+            links.push(inferred_link_row(&discovery_id, well, winner, method));
+            for candidate in candidates.iter().skip(1) {
+                diagnostics.push(candidate_diagnostic_row(
+                    &discovery_id,
+                    well,
+                    candidate,
+                    "lower_rank",
+                ));
+            }
+        } else {
+            report.unmatched += 1;
+            for candidate in &candidates {
+                let reason = if candidate_cmp(candidate, winner, contained).is_eq() {
+                    "equal_best_tie"
+                } else {
+                    "lower_rank"
+                };
+                diagnostics.push(candidate_diagnostic_row(
+                    &discovery_id,
+                    well,
+                    candidate,
+                    reason,
+                ));
+            }
         }
     }
     links.sort_by(|a, b| stable_id_cmp(&a[0], &b[0]).then_with(|| stable_id_cmp(&a[1], &b[1])));
     report.links = links.len();
+    report.candidates = diagnostics.len();
+    report.field_links = field_links.len();
     write_links(&output, &links)?;
+    write_candidates(&csv_dir.join(CANDIDATE_OUTPUT), &diagnostics)?;
+    write_field_links(&csv_dir.join(FIELD_OUTPUT), &field_links)?;
     Ok(report)
 }
 
 fn candidate<'a>(well: &Well, play: &'a Play) -> Option<Candidate<'a>> {
-    let mut best: Option<(Compatibility, Vec<ages::AgeAtom>, Vec<usize>)> = None;
+    let mut best: Option<(Compatibility, Vec<ages::AgeAtom>, usize)> = None;
     for (index, source_age) in well.ages.iter().enumerate() {
         let Some(matched) = ages::compatibility(source_age, &play.age) else {
             continue;
         };
-        if best.as_ref().is_none_or(|(current, _, _)| {
-            compatibility_rank(matched.compatibility) > compatibility_rank(*current)
-        }) {
-            best = Some((matched.compatibility, matched.atoms, vec![index + 1]));
-        } else if best
-            .as_ref()
-            .is_some_and(|(current, _, _)| *current == matched.compatibility)
-        {
-            let (_, atoms, slots) = best.as_mut().unwrap();
-            slots.push(index + 1);
-            atoms.extend(matched.atoms);
-            atoms.sort();
-            atoms.dedup();
-        }
+        best = Some((matched.compatibility, matched.atoms, index + 1));
+        break;
     }
-    let (compatibility, matched, matched_slots) = best?;
+    let (compatibility, matched, matched_slot) = best?;
     Some(Candidate {
         play,
         compatibility,
         matched,
-        matched_slots,
+        matched_slot,
         distance_m: distance_metres(well.point, &play.geometry),
     })
+}
+
+fn candidate_cmp(
+    left: &Candidate<'_>,
+    right: &Candidate<'_>,
+    contained_class: bool,
+) -> std::cmp::Ordering {
+    if contained_class {
+        let left_contained = left.distance_m <= DISTANCE_TIE_EPSILON_M;
+        let right_contained = right.distance_m <= DISTANCE_TIE_EPSILON_M;
+        right_contained
+            .cmp(&left_contained)
+            .then_with(|| left.matched_slot.cmp(&right.matched_slot))
+            .then_with(|| {
+                compatibility_rank(right.compatibility).cmp(&compatibility_rank(left.compatibility))
+            })
+    } else {
+        left.matched_slot.cmp(&right.matched_slot).then_with(|| {
+            if (left.distance_m - right.distance_m).abs() <= DISTANCE_TIE_EPSILON_M {
+                std::cmp::Ordering::Equal
+            } else {
+                left.distance_m.total_cmp(&right.distance_m)
+            }
+        })
+    }
+}
+
+fn inferred_link_row(
+    discovery_id: &str,
+    well: &Well,
+    selected: &Candidate<'_>,
+    method: &str,
+) -> Vec<String> {
+    vec![
+        discovery_id.into(),
+        selected.play.id.clone(),
+        well.id.clone(),
+        "sodir_designated_discovery_wellbore".into(),
+        method.into(),
+        format!("{:.3}", selected.distance_m),
+        compatibility_name(selected.compatibility).into(),
+        json_atoms(&selected.matched),
+        format!("[{}]", selected.matched_slot),
+        json_atoms(&normalized_well_ages(well)),
+        json_atoms(ages::normalize(&selected.play.age).unwrap_or_default()),
+        "local_equirectangular_polygon_boundary".into(),
+        "true".into(),
+        "1".into(),
+        "false".into(),
+        "designated_discovery_wellbore".into(),
+        String::new(),
+        String::new(),
+    ]
+}
+
+fn direct_link_row(
+    discovery_id: &str,
+    example: &crate::sodir::play_examples::PublishedFieldExample,
+) -> Vec<String> {
+    vec![
+        discovery_id.into(),
+        example.play_id.to_string(),
+        String::new(),
+        example.source_url.into(),
+        "via_field_example".into(),
+        String::new(),
+        String::new(),
+        "[]".into(),
+        "[]".into(),
+        "[]".into(),
+        "[]".into(),
+        String::new(),
+        "true".into(),
+        "1".into(),
+        "false".into(),
+        "field_published_example".into(),
+        example.source_url.into(),
+        example.accessed_on.into(),
+    ]
+}
+
+fn candidate_diagnostic_row(
+    discovery_id: &str,
+    well: &Well,
+    candidate: &Candidate<'_>,
+    reason: &str,
+) -> Vec<String> {
+    vec![
+        discovery_id.into(),
+        candidate.play.id.clone(),
+        well.id.clone(),
+        reason.into(),
+        if candidate.distance_m <= DISTANCE_TIE_EPSILON_M {
+            "contains".into()
+        } else {
+            "nearest".into()
+        },
+        format!("{:.3}", candidate.distance_m),
+        compatibility_name(candidate.compatibility).into(),
+        json_atoms(&candidate.matched),
+        format!("[{}]", candidate.matched_slot),
+        json_atoms(&normalized_well_ages(well)),
+        json_atoms(ages::normalize(&candidate.play.age).unwrap_or_default()),
+        "local_equirectangular_polygon_boundary".into(),
+    ]
+}
+
+fn diagnostic_row(discovery_id: &str, play_id: &str, well_id: &str, reason: &str) -> Vec<String> {
+    vec![
+        discovery_id.into(),
+        play_id.into(),
+        well_id.into(),
+        reason.into(),
+        String::new(),
+        String::new(),
+        String::new(),
+        "[]".into(),
+        "[]".into(),
+        "[]".into(),
+        "[]".into(),
+        String::new(),
+    ]
 }
 
 fn compatibility_rank(value: Compatibility) -> u8 {
@@ -354,6 +556,9 @@ fn write_links(path: &Path, rows: &[Vec<String>]) -> Result<()> {
             "inferred",
             "candidate_tie_count",
             "ambiguous",
+            "evidence_scope",
+            "source_url",
+            "source_accessed_on",
         ])
         .map_err(|error| SodirError::Csv(format!("header {}: {error}", tmp.display())))?;
     for row in rows {
@@ -366,15 +571,72 @@ fn write_links(path: &Path, rows: &[Vec<String>]) -> Result<()> {
     Ok(())
 }
 
+fn write_candidates(path: &Path, rows: &[Vec<String>]) -> Result<()> {
+    write_table(
+        path,
+        &[
+            "dscNpdidDiscovery",
+            "plyNPDID",
+            "wlbNpdidWellbore",
+            "rejection_reason",
+            "match_method",
+            "distance_m",
+            "age_compatibility",
+            "matched_ages",
+            "matched_hc_slots",
+            "wellbore_ages",
+            "play_ages",
+            "distance_method",
+        ],
+        rows,
+    )
+}
+
+fn write_field_links(path: &Path, rows: &[Vec<String>]) -> Result<()> {
+    write_table(
+        path,
+        &[
+            "fldNpdidField",
+            "plyNPDID",
+            "match_method",
+            "inferred",
+            "source_label",
+            "source_url",
+            "source_accessed_on",
+        ],
+        rows,
+    )
+}
+
+fn write_table(path: &Path, header: &[&str], rows: &[Vec<String>]) -> Result<()> {
+    let tmp = path.with_extension("csv.tmp");
+    let mut writer = csv::Writer::from_path(&tmp)
+        .map_err(|error| SodirError::Csv(format!("open {}: {error}", tmp.display())))?;
+    writer
+        .write_record(header)
+        .map_err(|error| SodirError::Csv(format!("header {}: {error}", tmp.display())))?;
+    for row in rows {
+        writer
+            .write_record(row)
+            .map_err(|error| SodirError::Csv(format!("row {}: {error}", tmp.display())))?;
+    }
+    writer.flush()?;
+    std::fs::rename(&tmp, path)?;
+    Ok(())
+}
+
 fn is_owned_output(path: &Path) -> bool {
+    is_owned_table(
+        path,
+        "dscNpdidDiscovery,plyNPDID,wlbNpdidWellbore,source,match_method,distance_m,",
+    )
+}
+
+fn is_owned_table(path: &Path, prefix: &str) -> bool {
     std::fs::read_to_string(path)
         .ok()
         .and_then(|contents| contents.lines().next().map(str::to_string))
-        .is_some_and(|header| {
-            header.starts_with(
-                "dscNpdidDiscovery,plyNPDID,wlbNpdidWellbore,source,match_method,distance_m,",
-            )
-        })
+        .is_some_and(|header| header.starts_with(prefix))
 }
 
 fn stable_id_cmp(left: &str, right: &str) -> std::cmp::Ordering {
@@ -443,6 +705,8 @@ mod tests {
                 contained: 1,
                 nearest: 1,
                 unmatched: 1,
+                candidates: 0,
+                field_links: 0,
             }
         );
         let first = std::fs::read_to_string(dir.join(OUTPUT)).unwrap();
@@ -514,5 +778,77 @@ mod tests {
             std::fs::read_to_string(output).unwrap(),
             "caller,owned\n1,value\n"
         );
+    }
+
+    #[test]
+    fn hc_slot_priority_precedes_compatibility_quality() {
+        let well = Well {
+            id: "1".into(),
+            point: geo::Point::new(1.0, 1.0),
+            ages: ["JURASSIC".into(), "EARLY JURASSIC".into(), String::new()],
+        };
+        let play = Play {
+            id: "1".into(),
+            geometry: parse_geometry("POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))").unwrap(),
+            age: "Lower-Middle Jurassic".into(),
+        };
+        let candidate = candidate(&well, &play).unwrap();
+        assert_eq!(candidate.matched_slot, 1);
+        assert_eq!(candidate.compatibility, Compatibility::Partial);
+    }
+
+    #[test]
+    fn duplicate_discovery_conflict_is_unassigned_and_diagnosed_once() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        write(
+            dir,
+            "discovery.csv",
+            "dscNpdidDiscovery,wlbNpdidWellbore,fldNpdidField,fldName\n1,10,,\n1,11,,\n",
+        );
+        write(dir, "wellbore.csv", "wlbNpdidWellbore,wlbAgeWithHc1,wkt_geometry\n10,EARLY JURASSIC,POINT (1 1)\n11,EARLY JURASSIC,POINT (1 1)\n");
+        write(dir, "play.csv", "plyNPDID,plyAge,wkt_geometry\n1,Lower-Middle Jurassic,\"POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))\"\n");
+        let report = apply(dir).unwrap();
+        assert_eq!(report.links, 0);
+        assert_eq!(report.unmatched, 1);
+        let diagnostics = read_records(&dir.join(CANDIDATE_OUTPUT)).unwrap();
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(
+            diagnostics[0]["rejection_reason"],
+            "conflicting_discovery_rows"
+        );
+    }
+
+    #[test]
+    fn unique_published_field_example_precedes_detection() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        write(
+            dir,
+            "discovery.csv",
+            "dscNpdidDiscovery,wlbNpdidWellbore,fldNpdidField,fldName\n1,,46437,TROLL\n",
+        );
+        write(dir, "wellbore.csv", "wlbNpdidWellbore,wkt_geometry\n");
+        write(dir, "play.csv", "plyNPDID,plyName,plyAge,wkt_geometry\n242,nju-1,Upper Jurassic,\"POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))\"\n");
+        let report = apply(dir).unwrap();
+        assert_eq!(report.links, 1);
+        assert_eq!(report.field_links, 1);
+        let assigned = read_records(&dir.join(OUTPUT)).unwrap();
+        assert_eq!(assigned[0]["plyNPDID"], "242");
+        assert_eq!(assigned[0]["match_method"], "via_field_example");
+        assert_eq!(assigned[0]["evidence_scope"], "field_published_example");
+        assert_eq!(assigned[0]["inferred"], "true");
+        let fields = read_records(&dir.join(FIELD_OUTPUT)).unwrap();
+        assert_eq!(fields[0]["match_method"], "published_example");
+        assert_eq!(fields[0]["inferred"], "false");
+
+        write(
+            dir,
+            "play.csv",
+            "plyNPDID,plyName,plyAge,wkt_geometry\n242,RENAMED,Upper Jurassic,\"POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))\"\n",
+        );
+        let report = apply(dir).unwrap();
+        assert_eq!(report.links, 0);
+        assert_eq!(report.field_links, 0);
     }
 }

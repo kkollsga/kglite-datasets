@@ -56,7 +56,12 @@ fn refresh(
     let blueprint = parse_json(&blueprint_json, "blueprint")?;
     let mut needed = datasets_used_by_blueprint(&blueprint);
     if enhance_discovery_play {
-        needed.retain(|stem| stem != "_derived_discovery_play");
+        needed.retain(|stem| {
+            stem != "_derived_discovery_play"
+                && stem != "_derived_discovery_play_candidate"
+                && stem != "_derived_field_play"
+                && stem != "_derived_discovery_volume"
+        });
     }
 
     // `fetch_all` is synchronous now (backed by the shared blocking
@@ -109,6 +114,30 @@ fn refresh(
     pp.set_item(
         "discovery_play_unmatched",
         report.preprocess.discovery_play.unmatched,
+    )?;
+    pp.set_item(
+        "discovery_play_candidates",
+        report.preprocess.discovery_play.candidates,
+    )?;
+    pp.set_item(
+        "field_play_links",
+        report.preprocess.discovery_play.field_links,
+    )?;
+    pp.set_item(
+        "discovery_volume_reported",
+        report.preprocess.discovery_volume.reported,
+    )?;
+    pp.set_item(
+        "discovery_volume_singleton_copies",
+        report.preprocess.discovery_volume.singleton_copies,
+    )?;
+    pp.set_item(
+        "discovery_volume_inclusion_deltas",
+        report.preprocess.discovery_volume.inclusion_deltas,
+    )?;
+    pp.set_item(
+        "discovery_volume_unresolved",
+        report.preprocess.discovery_volume.unresolved,
     )?;
     d.set_item("preprocess", pp)?;
 

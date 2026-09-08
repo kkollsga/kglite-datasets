@@ -8,13 +8,26 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 
 ### Added
 
-- Sodir now derives direct `Discovery -[:IN_PLAY]-> Play` relationships from
-  each discovery's designated wellbore. Known hydrocarbon ages constrain every
-  match; containment is preferred and unmatched discoveries fall back to the
-  nearest compatible polygon without a distance cutoff. Edge properties record
-  the well, method, metre distance and projection method, canonical age lists,
-  matching HC slots, and ambiguity. Existing discovery, wellbore, field, and
-  reserves values remain unchanged.
+- Sodir now assigns at most one `Discovery -[:IN_PLAY]-> Play` relationship.
+  Official published field examples take precedence; otherwise designated-well
+  containment precedes nearest-polygon fallback, with HC Age1, Age2, then Age3
+  priority and no distance cutoff. Unselected and tied hypotheses remain
+  inspectable through `CANDIDATE_PLAY`, while direct published `Field IN_PLAY`
+  facts retain their source URL and access date.
+- `DiscoveryVolume` provides one query shape for original reported discovery
+  reserves and conservative generated observations. It copies the latest field
+  snapshot only for strict sole-discovery histories, keeps missing values null,
+  and records conflicts, redirects, overlaps, membership changes, signed deltas,
+  and source rows as explicit provenance or unresolved evidence. Existing source
+  nodes and reserve values remain unchanged.
+- Troll East and West receive a narrowly qualified generated component
+  allocation from the latest original field snapshot. The estimate assigns all
+  oil to West and applies the published approximate two-thirds East gas share
+  to gas, NGL, condensate, and non-oil OE; West receives the exact remainder.
+  The rows preserve the internal resource redirect, source snapshot, ratio,
+  assumptions, publication URL/year, and access date, and remain unresolved if
+  the constituent, redirect, direct-observation, interval, or snapshot checks
+  fail.
 
 ## [0.1.16] - 2026-09-08
 

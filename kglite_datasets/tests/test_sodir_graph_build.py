@@ -61,13 +61,28 @@ def test_discovery_play_membership_and_existing_joins(tmp_path: Path) -> None:
         "100,SYNTH-1,10,500,EARLY JURASSIC,INDETERMINATE,,POINT (2 61)\n"
     )
     (csv_dir / "field.csv").write_text("fldNpdidField,fldName\n500,Synthetic field\n")
+    (csv_dir / "field_discoveries_incl_hst.csv").write_text(
+        "fldNpdidField,dscNpdidDiscovery,fldDiscoveryInclFromDate,fldDiscoveryInclToDate\n500,10,2000-01-01,\n"
+    )
+    (csv_dir / "field_reserves.csv").write_text(
+        "fldNpdidField,fldDateOffResEstDisplay,fldRecoverableOil,fldRecoverableGas,"
+        "fldRecoverableNGL,fldRecoverableCondensate,fldRecoverableOE\n"
+        "500,2025-12-31,10,20,,,30\n"
+    )
     (csv_dir / "play.csv").write_text(
         "plyNPDID,plyName,plyAge,wkt_geometry\n"
         '900,Synthetic play,Lower-Middle Jurassic,"POLYGON ((1 60, 3 60, 3 62, 1 62, 1 60))"\n'
     )
     now = "2026-09-08T10:00:00+00:00"
     entries = {}
-    for stem in ("discovery", "wellbore", "field", "play"):
+    for stem in (
+        "discovery",
+        "wellbore",
+        "field",
+        "play",
+        "field_discoveries_incl_hst",
+        "field_reserves",
+    ):
         entries[stem] = {
             "kind": "user_supplied",
             "csv_path": f"csv/{stem}.csv",
@@ -86,7 +101,7 @@ def test_discovery_play_membership_and_existing_joins(tmp_path: Path) -> None:
         )
     )
     packaged = json.loads(PACKAGED_BLUEPRINT.read_text())
-    nodes = {name: packaged["nodes"][name] for name in ("Field", "Wellbore", "Play", "Discovery")}
+    nodes = {name: packaged["nodes"][name] for name in ("Field", "Wellbore", "Play", "Discovery", "DiscoveryVolume")}
     for node in nodes.values():
         node["sub_nodes"] = {}
     nodes["Field"]["connections"] = {"fk_edges": {}, "junction_edges": {}}
@@ -136,6 +151,20 @@ def test_discovery_play_membership_and_existing_joins(tmp_path: Path) -> None:
         "MATCH (d:Discovery)-[:DISCOVERED_BY]->(w:Wellbore)-[:IN_FIELD]->(f:Field) "
         "RETURN w.title AS well, f.title AS field"
     ).to_list() == [{"well": "SYNTH-1", "field": "Synthetic field"}]
+    assert graph.cypher(
+        "MATCH (v:DiscoveryVolume)-[:OF_DISCOVERY]->(d:Discovery) "
+        "RETURN d.title AS discovery, v.generated AS generated, v.method AS method, "
+        "v.recoverable_oil AS oil, v.recoverable_gas AS gas, v.recoverable_ngl AS ngl"
+    ).to_list() == [
+        {
+            "discovery": "NJU-style",
+            "generated": True,
+            "method": "singleton_field_copy",
+            "oil": 10.0,
+            "gas": 20.0,
+            "ngl": None,
+        }
+    ]
 
 
 def test_replacement_blueprint_cannot_opt_in_by_filename_alone(tmp_path: Path) -> None:

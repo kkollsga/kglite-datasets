@@ -1,2 +1,3 @@
-dscNpdidDiscovery,wlbNpdidWellbore,fldNpdidField,dscName
-10,100,500,Synthetic discovery
+dscNpdidDiscovery,dscNpdidResInclInDisc,wlbNpdidWellbore,fldNpdidField,dscName
+10,,100,500,Synthetic reported discovery
+20,,,600,Synthetic sole discovery

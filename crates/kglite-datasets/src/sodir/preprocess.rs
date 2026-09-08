@@ -25,6 +25,7 @@ pub struct PreprocessReport {
     pub chrono_parent_fk: Option<usize>,
     pub announced_block_fk: Option<usize>,
     pub discovery_play: crate::sodir::enhance::EnhancementReport,
+    pub discovery_volume: crate::sodir::volume::VolumeReport,
 }
 
 /// Run every applicable FK-derivation step on the CSVs under `csv_dir`.
@@ -54,6 +55,7 @@ pub fn apply_with_enhancement(
     }
     if enhance_discovery_play {
         report.discovery_play = crate::sodir::enhance::apply(csv_dir)?;
+        report.discovery_volume = crate::sodir::volume::apply(csv_dir)?;
     }
 
     Ok(report)

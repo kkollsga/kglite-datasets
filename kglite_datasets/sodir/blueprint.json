@@ -84,6 +84,23 @@
               "fldDiscoveryInclFromDate": "validFrom",
               "fldDiscoveryInclToDate": "validTo"
             }
+          },
+          "IN_PLAY": {
+            "csv": "csv/_derived_field_play.csv",
+            "source_fk": "fldNpdidField",
+            "target": "Play",
+            "target_fk": "plyNPDID",
+            "properties": [
+              "match_method",
+              "inferred",
+              "source_label",
+              "source_url",
+              "source_accessed_on"
+            ],
+            "property_types": {
+              "inferred": "bool",
+              "source_accessed_on": "date"
+            }
           }
         }
       },
@@ -957,6 +974,7 @@
         "dscOwnerName": "string",
         "dscHcType": "string",
         "ngpName": "string",
+        "dscNpdidResInclInDisc": "int",
         "dscResInclInDiscoveryName": "string",
         "dscDateUpdated": "date",
         "dscDateUpdatedMax": "date",
@@ -1016,7 +1034,10 @@
               "distance_method",
               "inferred",
               "candidate_tie_count",
-              "ambiguous"
+              "ambiguous",
+              "evidence_scope",
+              "source_url",
+              "source_accessed_on"
             ],
             "property_types": {
               "wlbNpdidWellbore": "int",
@@ -1027,7 +1048,8 @@
               "play_ages": "list",
               "inferred": "bool",
               "candidate_tie_count": "int",
-              "ambiguous": "bool"
+              "ambiguous": "bool",
+              "source_accessed_on": "date"
             }
           },
           "HAS_LICENSEE": {
@@ -1049,6 +1071,32 @@
             "property_types": {
               "dscOperatorFrom": "validFrom",
               "dscOperatorTo": "validTo"
+            }
+          },
+          "CANDIDATE_PLAY": {
+            "csv": "csv/_derived_discovery_play_candidate.csv",
+            "source_fk": "dscNpdidDiscovery",
+            "target": "Play",
+            "target_fk": "plyNPDID",
+            "properties": [
+              "wlbNpdidWellbore",
+              "rejection_reason",
+              "match_method",
+              "distance_m",
+              "age_compatibility",
+              "matched_ages",
+              "matched_hc_slots",
+              "wellbore_ages",
+              "play_ages",
+              "distance_method"
+            ],
+            "property_types": {
+              "wlbNpdidWellbore": "int",
+              "distance_m": "float",
+              "matched_ages": "list",
+              "matched_hc_slots": "list",
+              "wellbore_ages": "list",
+              "play_ages": "list"
             }
           }
         }
@@ -1860,6 +1908,56 @@
       ],
       "connections": {
         "fk_edges": {}
+      },
+      "sub_nodes": {}
+    },
+    "DiscoveryVolume": {
+      "csv": "csv/_derived_discovery_volume.csv",
+      "pk": "volume_id",
+      "title": "method",
+      "properties": {
+        "source_discovery_id": "int",
+        "generated": "bool",
+        "usable": "bool",
+        "method": "string",
+        "coverage": "string",
+        "basis": "string",
+        "estimate_date": "date",
+        "resource_class": "string",
+        "recoverable_oil": "float",
+        "recoverable_gas": "float",
+        "recoverable_ngl": "float",
+        "recoverable_condensate": "float",
+        "recoverable_oe": "float",
+        "raw_redirect_id": "int",
+        "source_record_identity": "string",
+        "source_record_json": "string",
+        "source_before_identity": "string",
+        "source_before_json": "string",
+        "source_duplicate_count": "int",
+        "conflict": "bool",
+        "unresolved_reason": "string",
+        "signed_deltas_json": "string",
+        "generation_parameters_json": "string",
+        "generation_source_url": "string",
+        "generation_source_publication_year": "int",
+        "generation_source_accessed_on": "date"
+      },
+      "skipped": [
+        "dscNpdidDiscovery",
+        "fldNpdidField"
+      ],
+      "connections": {
+        "fk_edges": {
+          "OF_DISCOVERY": {
+            "target": "Discovery",
+            "fk": "dscNpdidDiscovery"
+          },
+          "SOURCE_FIELD": {
+            "target": "Field",
+            "fk": "fldNpdidField"
+          }
+        }
       },
       "sub_nodes": {}
     },
