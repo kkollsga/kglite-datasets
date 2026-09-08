@@ -24,13 +24,6 @@ g.cypher(
     "MATCH (d:Discovery)-[r:IN_PLAY]->(p:Play) "
     "RETURN d.title, p.title, r.match_method, r.distance_m, r.matched_ages"
 )
-
-# Optional document enrichment. Start with a bounded batch while exploring:
-g = sodir.open(
-    workdir,
-    include_press_releases=True,
-    press_release_limit=15,
-)
 ```
 
 Layout managed under `workdir`:
@@ -39,7 +32,6 @@ Layout managed under `workdir`:
 workdir/
     sodir_index.json          # fetch manifest (per-dataset row count, timestamps)
     csv/                      # cached CSVs, flat (field.csv, wellbore.csv, ...)
-    press_releases/raw/       # cached source PDFs and HTML
     graph/                    # disk graph dir built from the CSVs
 ```
 
@@ -73,69 +65,38 @@ plays overlap and must not be summed into an estate-wide total.
 
 ## Discovery volumes
 
-`DiscoveryVolume` provides one selected source hierarchy for volume queries. If
-a discovery belongs to a field with a valid reserve snapshot, the latest
-`FieldReserves` original-recoverable values are primary. Every constituent gets
-a link to the same field snapshot for play reachability, and every copy carries
-the same `aggregation_key`; deduplicate that key within each play. The row has
-`method=field_reserves_primary`, `scope=shared_field`, and
-`coverage=field_total`. It is field context, not a constituent allocation.
+`DiscoveryVolume` emits exactly one row for every discovery. The latest valid
+`DiscoveryReserves` snapshot is the primary source. Redirected discoveries do
+not copy their reporting root's values: the terminal reporting root holds the
+structured volume once, while included discoveries receive explicit null
+components.
 
-Only when no field snapshot exists does the loader use the latest dated
-`DiscoveryReserves` records. Distinct resource-class rows on that date are
-combined after exact duplicate removal; blanks remain null and numeric zero
-remains zero. A conflicting or entirely empty latest field snapshot remains
-missing rather than falling through component-by-component. Redirected discoveries share their terminal reporting root's
-`aggregation_key` and covered-ID list. Conflicting records remain unusable.
-Raw `FieldReserves` and `DiscoveryReserves` nodes and source JSON provenance are
-preserved.
+When a field has no discovery volume for its earliest discovery, that one
+discovery receives the latest valid `FieldReserves` snapshot as
+`method=field_reserves_fallback`. The fallback never moves to a later discovery,
+even when the earliest discovery already has its own volume; in that case the
+field total is unused. Later field discoveries without their own structured
+volume remain present as `method=no_volume`, `usable=false`, with every volume
+component null. Numeric zero remains a reported value.
 
-Do not sum repeated field keys, and do not sum totals between plays: the same
-field can be represented by discoveries in several plays. For chronology, use
-the earliest designated discovery-well completion date among the field's
-matched discoveries in the selected play. Later discoveries are timing markers,
-not another copy of the field volume. Missing components remain missing; no
-component falls through to the secondary source.
+Duplicate latest snapshots with different bookkeeping IDs are collapsed by
+their component values (and by resource class for discovery rows), so they are
+not summed twice. `source_record_json` retains every raw row and
+`source_duplicate_count` records how many semantic duplicates were collapsed.
+
+The earliest member is selected by the discovery's current field-inclusion
+date, then its earliest field-inclusion-history date. If neither inclusion date
+is available, the loader falls back to the designated discovery well's
+completion date, discovery year, and finally numeric discovery ID. Equal dates
+are resolved by numeric discovery ID. The output itself is sorted by numeric
+discovery ID, so source row order cannot change the selected fallback or emitted
+order.
 
 ```python
 g.cypher(
     "MATCH (v:DiscoveryVolume)-[:OF_DISCOVERY]->(d:Discovery) "
-    "WHERE v.usable = true "
-    "RETURN d.title, v.recoverable_oe, v.method, v.scope, "
-    "v.aggregation_key, v.estimate_date LIMIT 20"
-)
-```
-
-## Press releases and volume evidence
-
-Set `include_press_releases=True` on `open()` or `fetch_all()` to fetch the
-distinct release URLs referenced by `wellbore.csv`. For an existing workdir,
-`sodir.fetch_press_releases(workdir, limit=15)` runs only the document pass.
-The source response is cached, the article is stored as Markdown on a
-`PressRelease` node, and `Wellbore -[:HAS_PRESS_RELEASE]-> PressRelease`
-preserves the source association.
-
-The document pass defines uncertain volumetrics narrowly: the discovery is
-assigned to a field, but `discovery_reserves.csv` contains no numeric
-recoverable-volume component for that discovery. An unfielded discovery does
-not trigger retrieval, and any reported discovery volume, including zero, is
-sufficient to skip its release. A shared field reserve does not count as a
-discovery-specific volume. `limit` is applied after this eligibility filter.
-
-`PressReleaseVolume` children record number-unit expressions such as
-`3–5 million Sm3` or `15–30 billion Sm3`, together with commodity, scope,
-qualifier, and the complete source sentence. Production rates are excluded.
-Discovery-specific estimates, combined-area totals, and otherwise unspecified
-mentions remain distinguishable. These rows are document evidence, not a
-replacement for the structured `DiscoveryVolume` hierarchy: inspect `scope`
-and `sourceText` before using a mention in an aggregate.
-
-```python
-g.cypher(
-    "MATCH (w:Wellbore)-[:HAS_PRESS_RELEASE]->(p:PressRelease) "
-    "MATCH (v:PressReleaseVolume)-[:OF_PRESS_RELEASE]->(p) "
-    "RETURN w.title, v.minimum, v.maximum, v.value, v.unit, "
-    "v.commodity, v.scope, v.sourceText"
+    "RETURN d.title, v.recoverable_oe, v.method, "
+    "v.estimate_date, v.unresolved_reason LIMIT 20"
 )
 ```
 
@@ -160,9 +121,10 @@ Columns omitted from source-node properties: ArcGIS bookkeeping (`OBJECTID`, a
 sequential row counter; `SHAPE`, a duplicate of `_geometry`; the computed
 `Shape__Area` / `Shape__Length`, derivable from the WKT), the `*FactPageUrl` /
 `*FactMapUrl` links back to Sodir's own web pages and the internal `*GUID`
-identifiers. `wlbPressReleaseUrl` is retained because it is the source for the
-optional document graph. Derived volume provenance retains exact source
-rows, including their identifiers, so the original records can be traced.
+identifiers. `wlbPressReleaseUrl` remains a raw Wellbore property for callers
+that want to open Sodir's source document themselves; the loader does not fetch
+or parse it. Derived volume provenance retains exact source rows, including
+their identifiers, so the original records can be traced.
 
 Columns dropped from `wellbore.csv` and `facility.csv`: the DMS
 (`…NsDeg`/`Min`/`Sec`/`Code`, `…EwDeg`/`Min`/`Sec`/`Code`), decimal-degree and

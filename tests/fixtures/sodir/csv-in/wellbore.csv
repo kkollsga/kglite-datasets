@@ -1,2 +1,2 @@
-wlbNpdidWellbore,dscNpdidDiscovery,fldNpdidField,wlbWellboreName,wlbAgeWithHc1,wlbAgeWithHc2,wlbAgeWithHc3,wkt_geometry
-100,10,500,SYNTH-1,EARLY JURASSIC,INDETERMINATE,,POINT (2 61)
+wlbNpdidWellbore,dscNpdidDiscovery,fldNpdidField,wlbWellboreName,wlbAgeWithHc1,wlbAgeWithHc2,wlbAgeWithHc3,wkt_geometry,wlbCompletionDate
+100,10,500,SYNTH-1,EARLY JURASSIC,INDETERMINATE,,POINT (2 61),2000-01-01

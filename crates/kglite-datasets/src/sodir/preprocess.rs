@@ -53,9 +53,6 @@ pub fn apply_with_enhancement(
     if csv_dir.join("block.csv").is_file() && csv_dir.join("announced_history.csv").is_file() {
         report.announced_block_fk = Some(add_announced_block_fk(csv_dir)?);
     }
-    if csv_dir.join("wellbore.csv").is_file() {
-        crate::sodir::press_releases::ensure_outputs(csv_dir)?;
-    }
     if enhance_discovery_play {
         report.discovery_play = crate::sodir::enhance::apply(csv_dir)?;
         report.discovery_volume = crate::sodir::volume::apply(csv_dir)?;

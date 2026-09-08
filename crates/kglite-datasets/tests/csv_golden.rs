@@ -136,8 +136,9 @@ fn sodir_preprocess_csv_golden() {
     );
     assert_eq!(report.discovery_play.links, 1);
     assert_eq!(report.discovery_play.contained, 1);
-    assert_eq!(report.discovery_volume.field_primary, 2);
-    assert_eq!(report.discovery_volume.discovery_secondary, 0);
+    assert_eq!(report.discovery_volume.discovery, 1);
+    assert_eq!(report.discovery_volume.field_fallback, 1);
+    assert_eq!(report.discovery_volume.null, 0);
 
     assert_or_update_golden("sodir-csv.sha256", staged.path());
 }

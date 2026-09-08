@@ -17,7 +17,7 @@ use pyo3::types::{PyDict, PyModule};
 use pyo3::wrap_pyfunction;
 
 use kglite_datasets::sodir::{
-    datasets_used_by_blueprint, fetch_all_with_enhancement, press_releases, SodirError, Workdir,
+    datasets_used_by_blueprint, fetch_all_with_enhancement, SodirError, Workdir,
 };
 
 fn map_err(e: SodirError) -> PyErr {
@@ -61,9 +61,6 @@ fn refresh(
                 && stem != "_derived_discovery_play_candidate"
                 && stem != "_derived_field_play"
                 && stem != "_derived_discovery_volume"
-                && stem != "_derived_press_release"
-                && stem != "_derived_press_release_volume"
-                && stem != "_derived_wellbore_press_release"
         });
     }
 
@@ -127,47 +124,19 @@ fn refresh(
         report.preprocess.discovery_play.field_links,
     )?;
     pp.set_item(
-        "discovery_volume_field_primary",
-        report.preprocess.discovery_volume.field_primary,
+        "discovery_volume_discovery",
+        report.preprocess.discovery_volume.discovery,
     )?;
     pp.set_item(
-        "discovery_volume_discovery_secondary",
-        report.preprocess.discovery_volume.discovery_secondary,
+        "discovery_volume_field_fallback",
+        report.preprocess.discovery_volume.field_fallback,
     )?;
     pp.set_item(
-        "discovery_volume_unresolved",
-        report.preprocess.discovery_volume.unresolved,
+        "discovery_volume_null",
+        report.preprocess.discovery_volume.null,
     )?;
     d.set_item("preprocess", pp)?;
 
-    Ok(d.into())
-}
-
-/// Fetch, cache and normalize releases for discoveries assigned to a field
-/// but lacking a numeric discovery-reserves volume. `limit` is intended for
-/// bounded pilots; `None` processes every eligible URL.
-#[pyfunction]
-#[pyo3(signature = (workdir, limit=None))]
-fn fetch_press_releases(
-    py: Python<'_>,
-    workdir: String,
-    limit: Option<usize>,
-) -> PyResult<Py<PyDict>> {
-    let wd = Workdir::new(workdir);
-    let report = py
-        .detach(|| press_releases::fetch(&wd, limit))
-        .map_err(map_err)?;
-    let d = PyDict::new(py);
-    d.set_item("uncertain_discoveries", report.uncertain_discoveries)?;
-    d.set_item("eligible_releases", report.eligible_releases)?;
-    d.set_item("selected", report.selected)?;
-    d.set_item("fetched", report.fetched)?;
-    d.set_item("cached", report.cached)?;
-    d.set_item("parsed", report.parsed)?;
-    d.set_item("failed", report.failed)?;
-    d.set_item("documents", report.documents)?;
-    d.set_item("wellbore_links", report.wellbore_links)?;
-    d.set_item("volume_mentions", report.volume_mentions)?;
     Ok(d.into())
 }
 
@@ -230,7 +199,6 @@ fn enhancement_version() -> u32 {
 pub fn register(py: Python<'_>, parent: &Bound<'_, PyModule>) -> PyResult<()> {
     let m = PyModule::new(py, "_sodir_internal")?;
     m.add_function(wrap_pyfunction!(refresh, &m)?)?;
-    m.add_function(wrap_pyfunction!(fetch_press_releases, &m)?)?;
     m.add_function(wrap_pyfunction!(merge_blueprint, &m)?)?;
     m.add_function(wrap_pyfunction!(datasets_for_blueprint, &m)?)?;
     m.add_function(wrap_pyfunction!(graph_dir, &m)?)?;

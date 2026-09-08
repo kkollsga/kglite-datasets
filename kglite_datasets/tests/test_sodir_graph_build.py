@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import gc
-import hashlib
 import json
 from pathlib import Path
 import shutil
@@ -94,77 +93,6 @@ def test_open_normalizes_relative_workdir_before_refresh_and_build(tmp_path: Pat
     assert seen == [tmp_path / "relative", tmp_path / "relative"]
 
 
-def test_press_release_markdown_volume_and_wellbore_link(tmp_path: Path) -> None:
-    csv_dir = tmp_path / "csv"
-    csv_dir.mkdir()
-    url = "https://example.invalid/discovery-release"
-    (csv_dir / "wellbore.csv").write_text(
-        f"wlbNpdidWellbore,wlbWellboreName,dscNpdidDiscovery,wlbPressReleaseUrl\n10,TEST-1,20,{url}\n"
-    )
-    (csv_dir / "discovery.csv").write_text("dscNpdidDiscovery,dscName,fldNpdidField\n20,Test discovery,30\n")
-    raw_dir = tmp_path / "press_releases" / "raw"
-    raw_dir.mkdir(parents=True)
-    release_id = hashlib.sha256(url.encode()).hexdigest()
-    (raw_dir / f"{release_id}.source").write_text(
-        "<html><body><main><article><h1>Test discovery</h1>"
-        "<p>The size of the discovery is 3-5 million Sm3 of recoverable oil.</p>"
-        "<p>The test flowed 1.2 million Sm3 gas per flow day.</p>"
-        "</article></main></body></html>"
-    )
-
-    report = wrapper.fetch_press_releases(tmp_path, limit=1, verbose=False)
-    assert report == {
-        "uncertain_discoveries": 1,
-        "eligible_releases": 1,
-        "selected": 1,
-        "fetched": 0,
-        "cached": 1,
-        "parsed": 1,
-        "failed": 0,
-        "documents": 1,
-        "wellbore_links": 1,
-        "volume_mentions": 1,
-    }
-
-    packaged = json.loads(PACKAGED_BLUEPRINT.read_text())
-    blueprint = {
-        "nodes": {
-            "Wellbore": {
-                "csv": "csv/wellbore.csv",
-                "pk": "wlbNpdidWellbore",
-                "title": "wlbWellboreName",
-                "connections": {
-                    "junction_edges": {
-                        "HAS_PRESS_RELEASE": packaged["nodes"]["Wellbore"]["connections"]["junction_edges"][
-                            "HAS_PRESS_RELEASE"
-                        ]
-                    }
-                },
-            },
-            "PressRelease": packaged["nodes"]["PressRelease"],
-        }
-    }
-    graph = _build_graph(tmp_path, blueprint, "memory", None, False)
-    assert graph.cypher(
-        "MATCH (w:Wellbore)-[:HAS_PRESS_RELEASE]->(p:PressRelease) "
-        "MATCH (v:PressReleaseVolume)-[:OF_PRESS_RELEASE]->(p) "
-        "RETURN w.title AS well, p.title AS release, v.minimum AS minimum, "
-        "v.maximum AS maximum, v.unit AS unit, v.commodity AS commodity, "
-        "v.scope AS scope, v.sourceText AS source"
-    ).to_list() == [
-        {
-            "well": "TEST-1",
-            "release": "Test discovery",
-            "minimum": 3.0,
-            "maximum": 5.0,
-            "unit": "million_sm3",
-            "commodity": "oil",
-            "scope": "whole_discovery",
-            "source": "The size of the discovery is 3-5 million Sm3 of recoverable oil.",
-        }
-    ]
-
-
 def test_discovery_play_membership_and_existing_joins(tmp_path: Path) -> None:
     csv_dir = tmp_path / "csv"
     csv_dir.mkdir()
@@ -173,8 +101,8 @@ def test_discovery_play_membership_and_existing_joins(tmp_path: Path) -> None:
     )
     (csv_dir / "wellbore.csv").write_text(
         "wlbNpdidWellbore,wlbWellboreName,dscNpdidDiscovery,fldNpdidField,"
-        "wlbAgeWithHc1,wlbAgeWithHc2,wlbAgeWithHc3,wkt_geometry,wlbPressReleaseUrl\n"
-        "7988,SYNTH-1,10,500,EARLY JURASSIC,INDETERMINATE,,POINT (2 61),https://factpages.sodir.no/pbl/wellbore_press_releases/7988-36-7-4.pdf\n"
+        "wlbAgeWithHc1,wlbAgeWithHc2,wlbAgeWithHc3,wkt_geometry,wlbCompletionDate,wlbPressReleaseUrl\n"
+        "7988,SYNTH-1,10,500,EARLY JURASSIC,INDETERMINATE,,POINT (2 61),1999-12-31,https://factpages.sodir.no/pbl/wellbore_press_releases/7988-36-7-4.pdf\n"
     )
     (csv_dir / "field.csv").write_text("fldNpdidField,fldName\n500,Synthetic field\n")
     (csv_dir / "field_discoveries_incl_hst.csv").write_text(
@@ -280,12 +208,12 @@ def test_discovery_play_membership_and_existing_joins(tmp_path: Path) -> None:
         {
             "discovery": "NJU-style",
             "generated": True,
-            "method": "field_reserves_primary",
+            "method": "field_reserves_fallback",
             "oil": 10.0,
             "gas": 20.0,
             "ngl": None,
-            "scope": "shared_field",
-            "aggregation_key": "field:500:2025-12-31:original_recoverable",
+            "scope": "individual",
+            "aggregation_key": "field:500:2025-12-31",
             "covered": ["10"],
         }
     ]

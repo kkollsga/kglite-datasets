@@ -8,21 +8,15 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 
 ### Added
 
-- Sodir can now fetch the distinct wellbore press releases on demand, cache
-  their raw PDF or HTML source, store article text as Markdown, and link each
-  `PressRelease` to every referenced `Wellbore`. Conservative
-  `PressReleaseVolume` evidence rows extract adjacent number-unit expressions,
-  reject production rates, classify commodity and scope, and retain the source
-  sentence. Fetching is limited to discoveries assigned to a field that have
-  no numeric entry in `discovery_reserves.csv`; a bounded
-  `press_release_limit` supports exploratory batches.
-
-- `DiscoveryVolume` now uses a simple source hierarchy: the latest structured
-  `FieldReserves` snapshot is primary for every associated discovery, with one
-  shared aggregation key that consumers deduplicate within a play. Only
-  discoveries without a field snapshot use their latest structured
-  `DiscoveryReserves` rows. Raw source values, resource classes, redirects,
-  missing components, numeric zeros, dates, and row provenance remain explicit.
+- `DiscoveryVolume` now emits one non-duplicating row per discovery. A latest
+  structured discovery snapshot is primary and is attached once to its terminal
+  reporting root. Otherwise the latest field snapshot is assigned only to the
+  field's earliest discovery; it never shifts to a later discovery when the
+  earliest already has direct data. Later and redirected discoveries retain
+  explicit null components. Current and historical field-inclusion dates choose
+  the earliest member, with designated-well completion, discovery-year and
+  discovery-ID fallbacks. Missing components stay null and finite numeric zero
+  stays reported.
 
 - Sodir now assigns every matching `Discovery -[:IN_PLAY]-> Play`
   relationship. Published discovery examples are authoritative, and all
