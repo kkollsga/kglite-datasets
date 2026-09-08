@@ -16,7 +16,9 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyModule};
 use pyo3::wrap_pyfunction;
 
-use kglite_datasets::sodir::{datasets_used_by_blueprint, fetch_all, SodirError, Workdir};
+use kglite_datasets::sodir::{
+    datasets_used_by_blueprint, fetch_all_with_enhancement, SodirError, Workdir,
+};
 
 fn map_err(e: SodirError) -> PyErr {
     match &e {
@@ -39,6 +41,7 @@ fn parse_json(s: &str, what: &str) -> PyResult<serde_json::Value> {
     index_cooldown_days=14,
     dataset_cooldown_days=30,
     concurrency=10,
+    enhance_discovery_play=false,
 ))]
 fn refresh(
     py: Python<'_>,
@@ -47,10 +50,14 @@ fn refresh(
     index_cooldown_days: i64,
     dataset_cooldown_days: i64,
     concurrency: usize,
+    enhance_discovery_play: bool,
 ) -> PyResult<Py<PyDict>> {
     let wd = Workdir::new(workdir);
     let blueprint = parse_json(&blueprint_json, "blueprint")?;
-    let needed = datasets_used_by_blueprint(&blueprint);
+    let mut needed = datasets_used_by_blueprint(&blueprint);
+    if enhance_discovery_play {
+        needed.retain(|stem| stem != "_derived_discovery_play");
+    }
 
     // `fetch_all` is synchronous now (backed by the shared blocking
     // `DatasetClient`); its own scoped worker pool overlaps the network
@@ -63,12 +70,13 @@ fn refresh(
     // are both `Send + Sync`.
     let report = py
         .detach(|| {
-            fetch_all(
+            fetch_all_with_enhancement(
                 &wd,
                 &needed,
                 index_cooldown_days,
                 dataset_cooldown_days,
                 concurrency,
+                enhance_discovery_play,
             )
         })
         .map_err(map_err)?;
@@ -86,6 +94,22 @@ fn refresh(
     pp.set_item("seismic_progress_fk", report.preprocess.seismic_progress_fk)?;
     pp.set_item("chrono_parent_fk", report.preprocess.chrono_parent_fk)?;
     pp.set_item("announced_block_fk", report.preprocess.announced_block_fk)?;
+    pp.set_item(
+        "discovery_play_links",
+        report.preprocess.discovery_play.links,
+    )?;
+    pp.set_item(
+        "discovery_play_contained",
+        report.preprocess.discovery_play.contained,
+    )?;
+    pp.set_item(
+        "discovery_play_nearest",
+        report.preprocess.discovery_play.nearest,
+    )?;
+    pp.set_item(
+        "discovery_play_unmatched",
+        report.preprocess.discovery_play.unmatched,
+    )?;
     d.set_item("preprocess", pp)?;
 
     Ok(d.into())
@@ -142,6 +166,11 @@ fn disk_graph_age_days(workdir: String) -> PyResult<Option<f64>> {
     Ok(Workdir::new(workdir).disk_graph_age_days())
 }
 
+#[pyfunction]
+fn enhancement_version() -> u32 {
+    kglite_datasets::sodir::enhance::VERSION
+}
+
 pub fn register(py: Python<'_>, parent: &Bound<'_, PyModule>) -> PyResult<()> {
     let m = PyModule::new(py, "_sodir_internal")?;
     m.add_function(wrap_pyfunction!(refresh, &m)?)?;
@@ -150,6 +179,7 @@ pub fn register(py: Python<'_>, parent: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(graph_dir, &m)?)?;
     m.add_function(wrap_pyfunction!(graph_exists, &m)?)?;
     m.add_function(wrap_pyfunction!(disk_graph_age_days, &m)?)?;
+    m.add_function(wrap_pyfunction!(enhancement_version, &m)?)?;
     parent.add_submodule(&m)?;
     let sys = py.import("sys")?;
     sys.getattr("modules")?

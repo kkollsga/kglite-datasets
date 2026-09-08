@@ -24,10 +24,18 @@ pub struct PreprocessReport {
     pub seismic_progress_fk: Option<usize>,
     pub chrono_parent_fk: Option<usize>,
     pub announced_block_fk: Option<usize>,
+    pub discovery_play: crate::sodir::enhance::EnhancementReport,
 }
 
 /// Run every applicable FK-derivation step on the CSVs under `csv_dir`.
 pub fn apply(csv_dir: &Path) -> Result<PreprocessReport> {
+    apply_with_enhancement(csv_dir, false)
+}
+
+pub fn apply_with_enhancement(
+    csv_dir: &Path,
+    enhance_discovery_play: bool,
+) -> Result<PreprocessReport> {
     let mut report = PreprocessReport::default();
 
     if csv_dir.join("petreg_licence.csv").is_file() {
@@ -43,6 +51,9 @@ pub fn apply(csv_dir: &Path) -> Result<PreprocessReport> {
     }
     if csv_dir.join("block.csv").is_file() && csv_dir.join("announced_history.csv").is_file() {
         report.announced_block_fk = Some(add_announced_block_fk(csv_dir)?);
+    }
+    if enhance_discovery_play {
+        report.discovery_play = crate::sodir::enhance::apply(csv_dir)?;
     }
 
     Ok(report)

@@ -20,6 +20,10 @@ g = sodir.open(workdir)
 csvs = sodir.fetch_all(workdir)
 
 g.cypher("MATCH (w:Wellbore)-[:IN_FIELD]->(f:Field) RETURN f.title, w.title LIMIT 5")
+g.cypher(
+    "MATCH (d:Discovery)-[r:IN_PLAY]->(p:Play) "
+    "RETURN d.title, p.title, r.match_method, r.distance_m, r.matched_ages"
+)
 ```
 
 Layout managed under `workdir`:
@@ -33,6 +37,17 @@ workdir/
 
 The loader derives foreign-key relationships during a `preprocess` join pass and
 converts ArcGIS geometry to WKT before the graph build.
+
+The same pass creates a deterministic derived junction for discovery/play
+membership. It follows `wlbNpdidWellbore` from each discovery, compares all
+three known `wlbAgeWithHc*` slots with the play's `plyAge`, and uses the
+designated well point against the complete play polygon. Polygon containment
+includes the boundary and respects holes and multipolygons. When no compatible
+polygon contains the point, the closest compatible polygon boundary is selected
+without a distance cutoff. Distances are metres in a well-centred local
+equirectangular projection; the edge's `distance_method` records that method.
+Unknown ages produce no inferred relationship. Equal candidates remain visible
+through `candidate_tie_count` and `ambiguous`.
 
 ## What the blueprint deliberately leaves out
 

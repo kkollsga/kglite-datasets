@@ -984,6 +984,10 @@
       ],
       "connections": {
         "fk_edges": {
+          "DISCOVERED_BY": {
+            "target": "Wellbore",
+            "fk": "wlbNpdidWellbore"
+          },
           "IN_FIELD": {
             "target": "Field",
             "fk": "fldNpdidField"
@@ -994,6 +998,38 @@
           }
         },
         "junction_edges": {
+          "IN_PLAY": {
+            "csv": "csv/_derived_discovery_play.csv",
+            "source_fk": "dscNpdidDiscovery",
+            "target": "Play",
+            "target_fk": "plyNPDID",
+            "properties": [
+              "wlbNpdidWellbore",
+              "source",
+              "match_method",
+              "distance_m",
+              "age_compatibility",
+              "matched_ages",
+              "matched_hc_slots",
+              "wellbore_ages",
+              "play_ages",
+              "distance_method",
+              "inferred",
+              "candidate_tie_count",
+              "ambiguous"
+            ],
+            "property_types": {
+              "wlbNpdidWellbore": "int",
+              "distance_m": "float",
+              "matched_ages": "list",
+              "matched_hc_slots": "list",
+              "wellbore_ages": "list",
+              "play_ages": "list",
+              "inferred": "bool",
+              "candidate_tie_count": "int",
+              "ambiguous": "bool"
+            }
+          },
           "HAS_LICENSEE": {
             "csv": "csv/discovery_licensee_hst.csv",
             "source_fk": "dscNpdidDiscovery",

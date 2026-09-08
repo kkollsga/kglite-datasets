@@ -4,6 +4,18 @@ All notable changes to kglite-datasets are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project adheres to
 semantic versioning (workspace version in the root `Cargo.toml`).
 
+## [Unreleased]
+
+### Added
+
+- Sodir now derives direct `Discovery -[:IN_PLAY]-> Play` relationships from
+  each discovery's designated wellbore. Known hydrocarbon ages constrain every
+  match; containment is preferred and unmatched discoveries fall back to the
+  nearest compatible polygon without a distance cutoff. Edge properties record
+  the well, method, metre distance and projection method, canonical age lists,
+  matching HC slots, and ambiguity. Existing discovery, wellbore, field, and
+  reserves values remain unchanged.
+
 ## [0.1.16] - 2026-09-08
 
 ### Changed

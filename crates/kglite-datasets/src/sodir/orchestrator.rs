@@ -266,6 +266,24 @@ pub fn fetch_all(
     dataset_cooldown_days: i64,
     concurrency: usize,
 ) -> Result<FetchAllReport> {
+    fetch_all_with_enhancement(
+        workdir,
+        needed,
+        index_cooldown_days,
+        dataset_cooldown_days,
+        concurrency,
+        false,
+    )
+}
+
+pub fn fetch_all_with_enhancement(
+    workdir: &Workdir,
+    needed: &[String],
+    index_cooldown_days: i64,
+    dataset_cooldown_days: i64,
+    concurrency: usize,
+    enhance_discovery_play: bool,
+) -> Result<FetchAllReport> {
     workdir.ensure_dirs()?;
     let client = ArcGISClient::new()?;
     let mut index = index::load(workdir)?;
@@ -279,7 +297,8 @@ pub fn fetch_all(
         concurrency,
     )?;
     index::save(workdir, &index)?;
-    let preprocess = preprocess::apply(&workdir.csv_dir())?;
+    let preprocess =
+        preprocess::apply_with_enhancement(&workdir.csv_dir(), enhance_discovery_play)?;
     Ok(FetchAllReport {
         refresh,
         preprocess,

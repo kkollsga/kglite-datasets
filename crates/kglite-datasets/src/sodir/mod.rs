@@ -24,9 +24,11 @@
 //!   └── error         SodirError                                        [A1]
 //! ```
 
+pub mod ages;
 pub mod blueprint;
 pub mod catalog;
 pub mod client;
+pub mod enhance;
 pub mod error;
 pub mod fetch;
 pub mod geojson_wkt;
@@ -38,4 +40,4 @@ pub mod preprocess;
 pub use blueprint::{datasets_used_by_blueprint, merge_blueprint_json};
 pub use error::SodirError;
 pub use layout::Workdir;
-pub use orchestrator::{fetch_all, FetchAllReport};
+pub use orchestrator::{fetch_all, fetch_all_with_enhancement, FetchAllReport};

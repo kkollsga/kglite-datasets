@@ -119,7 +119,8 @@ fn sodir_preprocess_csv_golden() {
     // Run the real FK-derivation joins (pure CSV→CSV, offline). Exercises the
     // sequential-PK + child-propagation path (petreg_licence) and the
     // name→NPDID self-join (strat_chrono).
-    let report = preprocess::apply(staged.path()).expect("preprocess applies");
+    let report =
+        preprocess::apply_with_enhancement(staged.path(), true).expect("preprocess applies");
 
     // Sanity: the joins actually fired (guards against a fixture that silently
     // no-ops, which would make the golden meaningless).
@@ -133,6 +134,8 @@ fn sodir_preprocess_csv_golden() {
         Some(1),
         "the root chrono row has an empty parent → 1 unmapped"
     );
+    assert_eq!(report.discovery_play.links, 1);
+    assert_eq!(report.discovery_play.contained, 1);
 
     assert_or_update_golden("sodir-csv.sha256", staged.path());
 }

@@ -50,7 +50,7 @@ pub fn fetch_to_csv(client: &ArcGISClient, stem: &str, csv_path: &Path) -> Resul
     let mut offset = 0usize;
     loop {
         let url = format!(
-            "{base}/{layer_id}/query?where=1%3D1&outFields=*&returnGeometry=true\
+            "{base}/{layer_id}/query?where=1%3D1&outFields=*&returnGeometry=true&outSR=4326\
              &resultOffset={offset}&resultRecordCount={PAGE_SIZE}&f=geojson"
         );
         let data = client.fetch_json(&url)?;

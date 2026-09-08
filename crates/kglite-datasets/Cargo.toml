@@ -24,7 +24,7 @@ default = ["sec", "sodir", "wikidata"]
 # SEC EDGAR — adds the zip (bulk submissions) + quick-xml (XBRL) parsers.
 sec = ["dep:zip", "dep:quick-xml"]
 # Norwegian Offshore Directorate — adds the geojson (ArcGIS geometry) dep.
-sodir = ["dep:geojson"]
+sodir = ["dep:geojson", "dep:geo", "dep:wkt"]
 # Wikidata dump orchestration — no extra deps beyond the shared set.
 wikidata = []
 
@@ -47,6 +47,8 @@ ureq = { version = "2", features = ["json"] }
 zip = { version = "2", optional = true, default-features = false, features = ["deflate"] }
 quick-xml = { version = "0.41", optional = true }
 geojson = { version = "0.24", optional = true }
+geo = { version = "0.29", optional = true }
+wkt = { version = "0.11", optional = true, features = ["geo-types"] }
 
 [dev-dependencies]
 # Golden oracle: SHA-256 of the canonical rendering of the loaders' emitted

@@ -19,6 +19,7 @@ Two cooldowns gate refetching:
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -88,7 +89,7 @@ def open(  # noqa: A001
     graph_dir = workdir / GRAPH_SUBDIR
     if storage == "disk" and not force_rebuild:
         age = _sodir_internal.disk_graph_age_days(str(workdir))
-        if age is not None and age < dataset_cooldown_days:
+        if age is not None and age < dataset_cooldown_days and _cached_blueprint_matches(graph_dir, merged_json):
             if verbose:
                 print(f"  Sodir graph at {graph_dir} is {age:.1f}d old (< {dataset_cooldown_days}d cooldown). Loading.")
             # A cache that will not re-open is a miss, not an error: fall
@@ -107,6 +108,7 @@ def open(  # noqa: A001
         index_cooldown_days=index_cooldown_days,
         dataset_cooldown_days=dataset_cooldown_days,
         concurrency=workers,
+        enhance_discovery_play=blueprint_path is None,
     )
     if verbose:
         _print_refresh_summary(report)
@@ -122,7 +124,7 @@ def open(  # noqa: A001
         shutil.rmtree(graph_dir)
     graph_dir.mkdir(parents=True)
     g = _build_graph(workdir, blueprint, "disk", graph_dir, verbose)
-    _write_source_meta(workdir, graph_dir, report.get("fetched", []))
+    _write_source_meta(workdir, graph_dir, report.get("fetched", []), merged_json)
     return g
 
 
@@ -151,6 +153,7 @@ def fetch_all(
         index_cooldown_days=index_cooldown_days,
         dataset_cooldown_days=dataset_cooldown_days,
         concurrency=workers,
+        enhance_discovery_play=blueprint_path is None,
     )
     if verbose:
         _print_refresh_summary(report)
@@ -248,13 +251,32 @@ def _build_graph(
     return g
 
 
-def _write_source_meta(workdir: Path, graph_dir: Path, fetched: list[str]) -> None:
+def _blueprint_digest(blueprint_json: str) -> str:
+    canonical = json.dumps(json.loads(blueprint_json), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def _cached_blueprint_matches(graph_dir: Path, blueprint_json: str) -> bool:
+    try:
+        metadata = json.loads((graph_dir / SOURCE_META_FILENAME).read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return False
+    return (
+        isinstance(metadata, dict)
+        and metadata.get("blueprint_sha256") == _blueprint_digest(blueprint_json)
+        and metadata.get("enhancement_version") == _sodir_internal.enhancement_version()
+    )
+
+
+def _write_source_meta(workdir: Path, graph_dir: Path, fetched: list[str], blueprint_json: str) -> None:
     """Stamp the disk graph with a build-time dataset snapshot."""
     index_path = workdir / INDEX_FILE
     datasets = json.loads(index_path.read_text(encoding="utf-8")).get("datasets", {}) if index_path.exists() else {}
     payload: dict[str, Any] = {
         "built_at_iso": datetime.now(timezone.utc).isoformat(),
         "fetched_during_build": sorted(fetched),
+        "blueprint_sha256": _blueprint_digest(blueprint_json),
+        "enhancement_version": _sodir_internal.enhancement_version(),
         "datasets": datasets,
     }
     (graph_dir / SOURCE_META_FILENAME).write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
