@@ -79,7 +79,7 @@ def open(  # noqa: A001
     if storage not in ("disk", "memory"):
         raise ValueError(f"storage must be 'disk' or 'memory', got {storage!r}")
 
-    workdir = Path(workdir)
+    workdir = Path(workdir).resolve()
     workdir.mkdir(parents=True, exist_ok=True)
     merged_json = _resolve_blueprint(
         workdir, blueprint_path, complement_blueprint, use_complement, complement_overrides, verbose
@@ -142,7 +142,7 @@ def fetch_all(
 ) -> dict[str, dict]:
     """Refresh CSVs and return the index entry for each needed dataset.
     Useful when callers want raw CSVs without building a graph."""
-    workdir = Path(workdir)
+    workdir = Path(workdir).resolve()
     workdir.mkdir(parents=True, exist_ok=True)
     merged_json = _resolve_blueprint(
         workdir, blueprint_path, complement_blueprint, use_complement, complement_overrides, verbose

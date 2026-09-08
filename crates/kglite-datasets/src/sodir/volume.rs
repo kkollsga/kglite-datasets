@@ -23,9 +23,8 @@ const COMPONENTS: &[(&str, &str, &str)] = &[
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct VolumeReport {
-    pub reported: usize,
-    pub singleton_copies: usize,
-    pub inclusion_deltas: usize,
+    pub field_primary: usize,
+    pub discovery_secondary: usize,
     pub unresolved: usize,
 }
 
@@ -39,7 +38,6 @@ fn cell<'a>(row: &'a Row, column: &str) -> Option<&'a str> {
 
 #[derive(Clone)]
 struct Snapshot {
-    field_id: String,
     date: String,
     values: [Option<f64>; 5],
     identity: String,
@@ -47,691 +45,210 @@ struct Snapshot {
     conflict: bool,
 }
 
-#[derive(Clone)]
-struct Membership {
-    field_id: String,
-    discovery_id: String,
-    from: Option<String>,
-    to: Option<String>,
-}
-
 /// Rebuild the common discovery-volume projection.
 pub fn apply(csv_dir: &Path) -> Result<VolumeReport> {
+    apply_source_precedence(csv_dir)
+}
+
+fn apply_source_precedence(csv_dir: &Path) -> Result<VolumeReport> {
     let discoveries_path = csv_dir.join("discovery.csv");
-    let discovery_reserves_path = csv_dir.join("discovery_reserves.csv");
-    let field_reserves_path = csv_dir.join("field_reserves.csv");
-    let memberships_path = csv_dir.join("field_discoveries_incl_hst.csv");
     if !discoveries_path.is_file() {
         return Ok(VolumeReport::default());
     }
-
     let discoveries = read_rows(&discoveries_path)?;
-    let reserve_rows = read_optional(&discovery_reserves_path)?;
-    let field_rows = read_optional(&field_reserves_path)?;
-    let membership_rows = read_optional(&memberships_path)?;
+    let reserve_rows = read_optional(&csv_dir.join("discovery_reserves.csv"))?;
+    let field_rows = read_optional(&csv_dir.join("field_reserves.csv"))?;
     let redirects = redirect_map(&discoveries);
     let discovery_ids: BTreeSet<String> = discoveries
         .iter()
         .filter_map(|row| cell(row, "dscNpdidDiscovery").map(str::to_string))
         .collect();
     let current_fields = lookup(&discoveries, "dscNpdidDiscovery", "fldNpdidField");
-    let direct_reported: BTreeSet<String> = reserve_rows
-        .iter()
-        .filter_map(|row| cell(row, "dscNpdidDiscovery").map(str::to_string))
-        .collect();
+    let snapshots = load_snapshots(&field_rows);
+    let mut field_members: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for (id, field) in &current_fields {
+        field_members
+            .entry(field.clone())
+            .or_default()
+            .push(id.clone());
+    }
+    for ids in field_members.values_mut() {
+        ids.sort();
+        ids.dedup();
+    }
 
     let mut output = Vec::new();
     let mut report = VolumeReport::default();
-    emit_reported(
-        &reserve_rows,
-        &redirects,
-        &discovery_ids,
-        &mut output,
-        &mut report,
-    );
-
-    let memberships = load_memberships(&membership_rows);
-    let snapshots = load_snapshots(&field_rows);
-    emit_singletons(
-        &memberships,
-        &snapshots,
-        &current_fields,
-        &redirects,
-        &direct_reported,
-        &mut output,
-        &mut report,
-    );
-    emit_inclusion_deltas(
-        &memberships,
-        &snapshots,
-        &current_fields,
-        &redirects,
-        &direct_reported,
-        &mut output,
-        &mut report,
-    );
-    let curated = emit_troll_allocation(
-        &memberships,
-        &snapshots,
-        &current_fields,
-        &redirects,
-        &direct_reported,
-        &mut output,
-    );
-    if curated {
-        output.retain(|row| {
-            row[5] == "true"
-                || !matches!(row[1].as_str(), "44552" | "44534")
-                || row[6] == "troll_published_component_allocation"
-        });
+    let mut secondary_roots = BTreeSet::new();
+    for id in &discovery_ids {
+        let field = current_fields.get(id).map(String::as_str).unwrap_or("");
+        let latest = snapshots
+            .get(field)
+            .and_then(|items| items.last())
+            .filter(|snapshot| !snapshot.conflict && snapshot.values.iter().any(Option::is_some));
+        if let Some(latest) = latest {
+            let covered = &field_members[field];
+            let key = format!("field:{field}:{}:original_recoverable", latest.date);
+            let mut row = volume_row(
+                &format!("field-primary-{}", digest(&format!("{key}|{id}"))),
+                id,
+                id,
+                field,
+                true,
+                true,
+                "field_reserves_primary",
+                "field_total",
+                "latest_original_recoverable_field_snapshot",
+                &latest.date,
+                "",
+                &latest.values,
+                redirects.get(id).map(String::as_str).unwrap_or(""),
+                &latest.identity,
+                &latest.json,
+                "",
+                "",
+                1,
+                false,
+                "",
+                "",
+            );
+            row[29] = "shared_field".into();
+            row[30] = key;
+            row[31] = serde_json::to_string(covered).expect("field members serialize");
+            row[32] = covered.len().to_string();
+            output.push(row);
+        } else {
+            secondary_roots.insert(
+                resolve_reporting_root(id, &redirects, &discovery_ids)
+                    .unwrap_or_else(|| id.clone()),
+            );
+        }
     }
-    emit_published_estimates(
-        &discoveries,
-        &discovery_ids,
-        &current_fields,
-        &redirects,
-        &mut output,
-    );
-
+    for root in secondary_roots {
+        let covered: Vec<String> = discovery_ids
+            .iter()
+            .filter(|id| {
+                resolve_reporting_root(id, &redirects, &discovery_ids).as_deref()
+                    == Some(root.as_str())
+                    && current_fields
+                        .get(*id)
+                        .and_then(|field| snapshots.get(field))
+                        .and_then(|s| s.last())
+                        .is_none()
+            })
+            .cloned()
+            .collect();
+        let source_rows: Vec<&Row> = reserve_rows
+            .iter()
+            .filter(|row| cell(row, "dscNpdidDiscovery") == Some(root.as_str()))
+            .collect();
+        let Some(latest_date) = source_rows
+            .iter()
+            .filter_map(|row| cell(row, "dscDateOffResEstDisplay").map(normalized_date))
+            .max()
+        else {
+            continue;
+        };
+        let mut latest: Vec<&Row> = source_rows
+            .into_iter()
+            .filter(|row| {
+                cell(row, "dscDateOffResEstDisplay")
+                    .map(normalized_date)
+                    .as_deref()
+                    == Some(latest_date.as_str())
+            })
+            .collect();
+        latest.sort_by_key(|row| row_json(row));
+        latest.dedup_by_key(|row| row_json(row));
+        let conflict =
+            !conflict_keys(&latest.iter().map(|row| (*row).clone()).collect::<Vec<_>>()).is_empty();
+        let mut values = [None; 5];
+        for (index, value) in values.iter_mut().enumerate() {
+            let present: Vec<f64> = latest
+                .iter()
+                .filter_map(|row| discovery_values(row)[index])
+                .collect();
+            if !present.is_empty() {
+                *value = Some(present.iter().sum());
+            }
+        }
+        let classes: BTreeSet<&str> = latest
+            .iter()
+            .filter_map(|row| cell(row, "dscReservesRC"))
+            .collect();
+        let source_json = serde_json::to_string(&latest.to_vec()).expect("source rows serialize");
+        let identity = digest(&source_json);
+        let key = format!("discovery:{root}:{latest_date}");
+        for id in &covered {
+            let mut row = volume_row(
+                &format!("discovery-secondary-{}", digest(&format!("{key}|{id}"))),
+                id,
+                &root,
+                "",
+                false,
+                !conflict,
+                "discovery_reserves_secondary",
+                "discovery_resources",
+                "latest_structured_discovery_reserves",
+                &latest_date,
+                &serde_json::to_string(&classes).expect("classes serialize"),
+                &values,
+                redirects.get(id).map(String::as_str).unwrap_or(""),
+                &identity,
+                &source_json,
+                "",
+                "",
+                latest.len(),
+                conflict,
+                if conflict {
+                    "conflicting_latest_resource_class"
+                } else {
+                    ""
+                },
+                "",
+            );
+            row[29] = if covered.len() > 1 {
+                "reporting_group"
+            } else {
+                "individual"
+            }
+            .into();
+            row[30] = key.clone();
+            row[31] = serde_json::to_string(&covered).expect("members serialize");
+            row[32] = covered.len().to_string();
+            output.push(row);
+        }
+    }
     output.sort_by(|a, b| a[0].cmp(&b[0]));
-    output.dedup_by(|left, right| left[0] == right[0]);
-    report.reported = output
+    report.field_primary = output
         .iter()
-        .filter(|row| row[6] == "reported_observation")
+        .filter(|row| row[6] == "field_reserves_primary")
         .count();
-    report.singleton_copies = output
+    report.discovery_secondary = output
         .iter()
-        .filter(|row| row[5] == "true" && row[6] == "singleton_field_copy")
+        .filter(|row| row[6] == "discovery_reserves_secondary")
         .count();
-    report.inclusion_deltas = output
-        .iter()
-        .filter(|row| row[5] == "true" && row[6] == "single_entrant_positive_delta")
-        .count();
-    report.unresolved = output.iter().filter(|row| row[5] == "false").count();
     write_rows(&csv_dir.join(OUTPUT), &output)?;
     Ok(report)
 }
 
-fn emit_published_estimates(
-    discoveries: &[Row],
-    discovery_ids: &BTreeSet<String>,
-    current_fields: &BTreeMap<String, String>,
+fn resolve_reporting_root(
+    id: &str,
     redirects: &BTreeMap<String, String>,
-    output: &mut Vec<Vec<String>>,
-) {
-    use crate::sodir::estimates::{self, Unit};
-    for discovery in discoveries {
-        let (Some(id), Some(name)) = (
-            cell(discovery, "dscNpdidDiscovery"),
-            cell(discovery, "dscName"),
-        ) else {
-            continue;
-        };
-        let Ok(id_number) = id.parse::<u64>() else {
-            continue;
-        };
-        if output.iter().any(|row| row[1] == id && row[5] == "true") {
-            continue;
+    ids: &BTreeSet<String>,
+) -> Option<String> {
+    let mut current = id;
+    let mut seen = BTreeSet::new();
+    loop {
+        if !seen.insert(current) {
+            return None;
         }
-        let Some(estimate) = estimates::newest_applicable_estimate(name, id_number) else {
-            continue;
-        };
-        let redirect = redirects.get(id).map(String::as_str).unwrap_or("");
-        if !redirect.is_empty()
-            && (!discovery_ids.contains(redirect)
-                || current_fields.get(id) != current_fields.get(redirect))
-        {
-            continue;
-        }
-        let values = [
-            estimate_value(estimate.recoverable_oil, Unit::MillionSm3Oil),
-            estimate_value(estimate.recoverable_gas, Unit::BillionSm3Gas),
-            estimate_value(estimate.recoverable_ngl, Unit::MillionTonnesNgl),
-            estimate_value(estimate.recoverable_condensate, Unit::MillionSm3Condensate),
-            estimate_value(estimate.recoverable_oe, Unit::MillionSm3OilEquivalent),
-        ];
-        if values.iter().all(Option::is_none) {
-            continue;
-        }
-        let source_json = serde_json::to_string(estimate).expect("published estimate serializes");
-        let identity = digest(&source_json);
-        let mut row = volume_row(
-            &format!("published-estimate-{id}-{identity}"),
-            id,
-            id,
-            current_fields.get(id).map(String::as_str).unwrap_or(""),
-            true,
-            true,
-            "published_resource_range_midpoint",
-            "published_whole_discovery_estimate",
-            "newest_applicable_published_discovery_estimate",
-            estimate.estimate_date,
-            "",
-            &values,
-            redirect,
-            &identity,
-            &source_json,
-            "",
-            "",
-            1,
-            false,
-            "",
-            "",
-        );
-        let len = row.len();
-        row[len - 4] = source_json;
-        row[len - 3] = estimate.source_url.into();
-        row[len - 2] = estimate.estimate_date.get(..4).unwrap_or("").into();
-        row[len - 1] = estimate.accessed_on.into();
-        output.push(row);
-    }
-}
-
-fn estimate_value(
-    value: Option<crate::sodir::estimates::EstimateValue>,
-    expected_unit: crate::sodir::estimates::Unit,
-) -> Option<f64> {
-    let value = value.filter(|value| value.unit == expected_unit)?;
-    value
-        .point
-        .or_else(|| match (value.minimum, value.maximum) {
-            (Some(minimum), Some(maximum))
-                if minimum.is_finite() && maximum.is_finite() && minimum <= maximum =>
-            {
-                let source_places = decimal_places(minimum).max(decimal_places(maximum));
-                let scale = 10_f64.powi((source_places + 1) as i32);
-                Some((((minimum + maximum) / 2.0) * scale).round() / scale)
-            }
-            _ => None,
-        })
-}
-
-fn decimal_places(value: f64) -> usize {
-    value
-        .to_string()
-        .split_once('.')
-        .map_or(0, |(_, fraction)| fraction.len())
-}
-
-const TROLL_FIELD: &str = "46437";
-const TROLL_EAST: &str = "44552";
-const TROLL_WEST: &str = "44534";
-const TROLL_SOURCE_URL: &str = "https://www.sodir.no/en/whats-new/publications/reports/resource-report/resource-report-2024/remaining-resources/";
-const TROLL_ACCESSED_ON: &str = "2026-09-08";
-
-fn emit_troll_allocation(
-    memberships: &[Membership],
-    snapshots: &BTreeMap<String, Vec<Snapshot>>,
-    current_fields: &BTreeMap<String, String>,
-    redirects: &BTreeMap<String, String>,
-    direct_reported: &BTreeSet<String>,
-    output: &mut Vec<Vec<String>>,
-) -> bool {
-    let history: Vec<_> = memberships
-        .iter()
-        .filter(|m| m.field_id == TROLL_FIELD)
-        .collect();
-    if !history
-        .iter()
-        .any(|m| matches!(m.discovery_id.as_str(), TROLL_EAST | TROLL_WEST))
-    {
-        return false;
-    }
-    let ids: BTreeSet<_> = history.iter().map(|m| m.discovery_id.as_str()).collect();
-    let latest = snapshots.get(TROLL_FIELD).and_then(|items| items.last());
-    let reason = if ids != BTreeSet::from([TROLL_EAST, TROLL_WEST]) {
-        Some("unexpected_constituent_history")
-    } else if ![TROLL_EAST, TROLL_WEST].iter().all(|id| {
-        current_fields
-            .get(*id)
-            .is_some_and(|field| field == TROLL_FIELD)
-    }) {
-        Some("current_field_disagrees")
-    } else if redirects
-        .get(TROLL_EAST)
-        .is_none_or(|target| target != TROLL_WEST)
-        || redirects
-            .get(TROLL_WEST)
-            .is_some_and(|target| target != TROLL_WEST)
-    {
-        Some("unexpected_resource_redirect")
-    } else if direct_reported.contains(TROLL_EAST) || direct_reported.contains(TROLL_WEST) {
-        Some("reported_overlap")
-    } else if history.iter().any(|membership| membership.from.is_none()) {
-        Some("incomplete_membership_interval")
-    } else if latest.is_none() {
-        Some("missing_field_snapshot")
-    } else if latest.unwrap().conflict {
-        Some("conflicting_latest_snapshot")
-    } else if latest.unwrap().date.as_str() < "2023-12-31" {
-        Some("snapshot_predates_source_context")
-    } else if ![TROLL_EAST, TROLL_WEST].iter().all(|id| {
-        history
-            .iter()
-            .any(|m| m.discovery_id == *id && active_at(m, &latest.unwrap().date))
-    }) {
-        Some("membership_not_active_at_snapshot")
-    } else if !latest
-        .unwrap()
-        .values
-        .iter()
-        .all(|value| value.is_some_and(|number| number >= 0.0))
-    {
-        Some("invalid_recoverable_values")
-    } else {
-        None
-    };
-    if let Some(reason) = reason {
-        for discovery_id in [TROLL_EAST, TROLL_WEST] {
-            output.push(unresolved_row(
-                discovery_id,
-                TROLL_FIELD,
-                "troll_published_component_allocation",
-                reason,
-            ));
-        }
-        return true;
-    }
-    let latest = latest.unwrap();
-    let source = latest.values.map(Option::unwrap);
-    let east = [
-        Some(0.0),
-        Some(source[1] * 2.0 / 3.0),
-        Some(source[2] * 2.0 / 3.0),
-        Some(source[3] * 2.0 / 3.0),
-        Some((source[4] - source[0]) * 2.0 / 3.0),
-    ];
-    let west = std::array::from_fn(|index| Some(source[index] - east[index].unwrap()));
-    let parameters = serde_json::json!({
-        "east_non_oil_ratio": 2.0 / 3.0, "expected_discoveries": [44552, 44534],
-        "assumptions": ["about two-thirds of recoverable gas assigned to Troll East", "all recoverable oil assigned to Troll West", "NGL and condensate follow the gas ratio", "non-oil OE follows the gas ratio", "published ratio carried forward to the latest qualifying field snapshot"]
-    }).to_string();
-    for (discovery_id, values, redirect) in [(TROLL_EAST, east, TROLL_WEST), (TROLL_WEST, west, "")]
-    {
-        let mut row = volume_row(
-            &format!(
-                "troll-allocation-{}",
-                digest(&format!("{discovery_id}|{}", latest.identity))
-            ),
-            discovery_id,
-            discovery_id,
-            TROLL_FIELD,
-            true,
-            true,
-            "troll_published_component_allocation",
-            "component_allocation_estimate",
-            "latest_original_recoverable",
-            &latest.date,
-            "",
-            &values,
-            redirect,
-            &latest.identity,
-            &latest.json,
-            "",
-            "",
-            1,
-            false,
-            "",
-            "",
-        );
-        let len = row.len();
-        row[len - 4] = parameters.clone();
-        row[len - 3] = TROLL_SOURCE_URL.into();
-        row[len - 2] = "2024".into();
-        row[len - 1] = TROLL_ACCESSED_ON.into();
-        output.push(row);
-    }
-    true
-}
-
-fn emit_reported(
-    rows: &[Row],
-    redirects: &BTreeMap<String, String>,
-    discovery_ids: &BTreeSet<String>,
-    output: &mut Vec<Vec<String>>,
-    report: &mut VolumeReport,
-) {
-    let mut groups: BTreeMap<String, Vec<&Row>> = BTreeMap::new();
-    for row in rows {
-        let Some(source_id) = cell(row, "dscNpdidDiscovery") else {
-            continue;
-        };
-        let date = normalized_date(cell(row, "dscDateOffResEstDisplay").unwrap_or_default());
-        let rc = cell(row, "dscReservesRC").unwrap_or_default();
-        let values = discovery_values(row);
-        let key = format!("{source_id}|{date}|{rc}|{}", values_key(&values));
-        groups.entry(key).or_default().push(row);
-    }
-    let conflict_keys = conflict_keys(rows);
-    for (key, duplicates) in groups {
-        let row = duplicates
-            .iter()
-            .copied()
-            .min_by_key(|row| digest(&row_json(row)))
-            .expect("reported group is non-empty");
-        let source_id = cell(row, "dscNpdidDiscovery").unwrap_or_default();
-        let date = normalized_date(cell(row, "dscDateOffResEstDisplay").unwrap_or_default());
-        let rc = cell(row, "dscReservesRC").unwrap_or_default();
-        let values = discovery_values(row);
-        let source_json = row_json(row);
-        let identity = digest(&source_json);
-        let conflict_key = format!("{source_id}|{date}|{rc}");
-        let reporting_parent = redirects.get(source_id).filter(|target| {
-            target.as_str() != source_id && discovery_ids.contains(target.as_str())
-        });
-        let reported_with_parent =
-            reporting_parent.is_some() && values.iter().all(|value| *value == Some(0.0));
-        output.push(volume_row(
-            &format!("reported-{}", digest(&key)),
-            source_id,
-            source_id,
-            "",
-            false,
-            !reported_with_parent,
-            "reported_observation",
-            "reported",
-            "discovery_reserves",
-            &date,
-            rc,
-            &values,
-            redirects.get(source_id).map(String::as_str).unwrap_or(""),
-            &identity,
-            &source_json,
-            "",
-            "",
-            duplicates.len(),
-            conflict_keys.contains(&conflict_key),
-            if reported_with_parent {
-                "resources_reported_with_parent"
-            } else {
-                ""
-            },
-            "",
-        ));
-        report.reported += 1;
-    }
-}
-
-fn emit_singletons(
-    memberships: &[Membership],
-    snapshots: &BTreeMap<String, Vec<Snapshot>>,
-    current_fields: &BTreeMap<String, String>,
-    redirects: &BTreeMap<String, String>,
-    direct_reported: &BTreeSet<String>,
-    output: &mut Vec<Vec<String>>,
-    report: &mut VolumeReport,
-) {
-    let by_field = memberships_by_field(memberships);
-    for (field_id, history) in by_field {
-        let ids: BTreeSet<&str> = history.iter().map(|m| m.discovery_id.as_str()).collect();
-        if ids.len() > 1 {
-            for discovery_id in ids {
-                output.push(unresolved_row(
-                    discovery_id,
-                    field_id,
-                    "singleton_field_copy",
-                    "multiple_historical_constituents",
-                ));
-                report.unresolved += 1;
-            }
-            continue;
-        }
-        let Some(discovery_id) = ids.iter().next().copied() else {
-            continue;
-        };
-        let reason = singleton_reason(
-            field_id,
-            discovery_id,
-            &history,
-            snapshots.get(field_id),
-            current_fields,
-            redirects,
-            direct_reported,
-        );
-        if let Some(reason) = reason {
-            output.push(unresolved_row(
-                discovery_id,
-                field_id,
-                "singleton_field_copy",
-                reason,
-            ));
-            report.unresolved += 1;
-            continue;
-        }
-        let latest = snapshots[field_id].last().unwrap();
-        output.push(volume_row(
-            &format!(
-                "singleton-{}",
-                digest(&format!(
-                    "{discovery_id}|{}|{}",
-                    latest.field_id, latest.identity
-                ))
-            ),
-            discovery_id,
-            discovery_id,
-            field_id,
-            true,
-            true,
-            "singleton_field_copy",
-            "complete_field_history",
-            "latest_original_recoverable_field_snapshot",
-            &latest.date,
-            "",
-            &latest.values,
-            "",
-            &latest.identity,
-            &latest.json,
-            "",
-            "",
-            1,
-            latest.conflict,
-            "",
-            "",
-        ));
-        report.singleton_copies += 1;
-    }
-}
-
-fn singleton_reason<'a>(
-    field_id: &str,
-    discovery_id: &str,
-    history: &[&Membership],
-    snapshots: Option<&Vec<Snapshot>>,
-    current_fields: &BTreeMap<String, String>,
-    redirects: &BTreeMap<String, String>,
-    direct_reported: &BTreeSet<String>,
-) -> Option<&'a str> {
-    if current_fields.get(discovery_id).map(String::as_str) != Some(field_id) {
-        return Some("current_field_disagrees");
-    }
-    if redirects
-        .get(discovery_id)
-        .is_some_and(|target| target != discovery_id)
-    {
-        return Some("resource_redirect");
-    }
-    if direct_reported.contains(discovery_id) {
-        return Some("reported_overlap");
-    }
-    if history.iter().any(|membership| membership.from.is_none()) {
-        return Some("incomplete_membership_interval");
-    }
-    let Some(snapshots) = snapshots.filter(|items| !items.is_empty()) else {
-        return Some("missing_field_snapshot");
-    };
-    let latest = snapshots.last().unwrap();
-    if latest.conflict {
-        return Some("conflicting_latest_snapshot");
-    }
-    if !history
-        .iter()
-        .any(|membership| active_at(membership, &latest.date))
-    {
-        return Some("membership_not_active_at_snapshot");
-    }
-    if latest.values.iter().all(Option::is_none) {
-        return Some("missing_recoverable_values");
-    }
-    None
-}
-
-fn emit_inclusion_deltas(
-    memberships: &[Membership],
-    snapshots: &BTreeMap<String, Vec<Snapshot>>,
-    current_fields: &BTreeMap<String, String>,
-    redirects: &BTreeMap<String, String>,
-    direct_reported: &BTreeSet<String>,
-    output: &mut Vec<Vec<String>>,
-    report: &mut VolumeReport,
-) {
-    for (field_id, field_snapshots) in snapshots {
-        let history: Vec<&Membership> = memberships
-            .iter()
-            .filter(|m| &m.field_id == field_id)
-            .collect();
-        for pair in field_snapshots.windows(2) {
-            let before = &pair[0];
-            let after = &pair[1];
-            let entrants: Vec<&&Membership> = history
-                .iter()
-                .filter(|membership| {
-                    membership
-                        .from
-                        .as_ref()
-                        .is_some_and(|date| date > &before.date && date <= &after.date)
-                })
-                .collect();
-            let leavers: Vec<&&Membership> = history
-                .iter()
-                .filter(|membership| {
-                    membership
-                        .to
-                        .as_ref()
-                        .is_some_and(|date| date > &before.date && date <= &after.date)
-                })
-                .collect();
-            if entrants.len() > 1 {
-                for entrant in &entrants {
-                    output.push(unresolved_row_with_evidence(
-                        &entrant.discovery_id,
-                        field_id,
-                        "single_entrant_positive_delta",
-                        "multiple_entrants",
-                        after,
-                        before,
-                        "",
-                    ));
-                    report.unresolved += 1;
-                }
-                continue;
-            }
-            if !leavers.is_empty() {
-                for membership in entrants.iter().chain(leavers.iter()) {
-                    output.push(unresolved_row_with_evidence(
-                        &membership.discovery_id,
-                        field_id,
-                        "single_entrant_positive_delta",
-                        "membership_leaver_in_window",
-                        after,
-                        before,
-                        "",
-                    ));
-                    report.unresolved += 1;
-                }
-                continue;
-            }
-            if entrants.is_empty() {
-                continue;
-            }
-            let discovery_id = &entrants[0].discovery_id;
-            let mut reason = None;
-            if before.conflict || after.conflict {
-                reason = Some("conflicting_snapshot");
-            } else if current_fields.get(discovery_id) != Some(field_id) {
-                reason = Some("current_field_disagrees");
-            } else if redirects
-                .get(discovery_id)
-                .is_some_and(|target| target != discovery_id)
-            {
-                reason = Some("resource_redirect");
-            } else if direct_reported.contains(discovery_id) {
-                reason = Some("reported_overlap");
-            }
-            let (deltas, signed, delta_reason) = deltas(before, after);
-            reason = reason.or(delta_reason);
-            if let Some(reason) = reason {
-                output.push(unresolved_row_with_evidence(
-                    discovery_id,
-                    field_id,
-                    "single_entrant_positive_delta",
-                    reason,
-                    after,
-                    before,
-                    &signed,
-                ));
-                report.unresolved += 1;
-                continue;
-            }
-            output.push(volume_row(
-                &format!(
-                    "delta-{}",
-                    digest(&format!(
-                        "{discovery_id}|{}|{}",
-                        before.identity, after.identity
-                    ))
-                ),
-                discovery_id,
-                discovery_id,
-                field_id,
-                true,
-                true,
-                "single_entrant_positive_delta",
-                "inclusion_window_change",
-                "consecutive_original_recoverable_field_snapshots",
-                &after.date,
-                "",
-                &deltas,
-                "",
-                &after.identity,
-                &after.json,
-                &before.identity,
-                &before.json,
-                1,
-                false,
-                "",
-                &signed,
-            ));
-            report.inclusion_deltas += 1;
+        match redirects.get(current).map(String::as_str) {
+            Some(next) if next != current && ids.contains(next) => current = next,
+            Some(next) if next != current => return None,
+            _ => return Some(current.to_string()),
         }
     }
-}
-
-fn deltas(before: &Snapshot, after: &Snapshot) -> ([Option<f64>; 5], String, Option<&'static str>) {
-    let mut values = [None; 5];
-    let mut signed = BTreeMap::new();
-    let mut comparable = 0;
-    let mut negative = false;
-    for (index, (name, _, _)) in COMPONENTS.iter().enumerate() {
-        if let (Some(left), Some(right)) = (before.values[index], after.values[index]) {
-            let delta = right - left;
-            signed.insert(*name, delta);
-            comparable += 1;
-            negative |= delta < 0.0;
-            values[index] = Some(delta);
-        }
-    }
-    let reason = if comparable == 0 {
-        Some("no_comparable_components")
-    } else if negative {
-        Some("negative_component_delta")
-    } else {
-        None
-    };
-    (
-        values,
-        serde_json::to_string(&signed).expect("signed delta serializes"),
-        reason,
-    )
 }
 
 fn load_snapshots(rows: &[Row]) -> BTreeMap<String, Vec<Snapshot>> {
@@ -765,7 +282,6 @@ fn load_snapshots(rows: &[Row]) -> BTreeMap<String, Vec<Snapshot>> {
             .unwrap();
         let json = row_json(row);
         out.entry(field_id.clone()).or_default().push(Snapshot {
-            field_id,
             date,
             values: field_values(row),
             identity: digest(&json),
@@ -781,54 +297,6 @@ fn load_snapshots(rows: &[Row]) -> BTreeMap<String, Vec<Snapshot>> {
         });
     }
     out
-}
-
-fn load_memberships(rows: &[Row]) -> Vec<Membership> {
-    let mut out: Vec<_> = rows
-        .iter()
-        .filter_map(|row| {
-            Some(Membership {
-                field_id: cell(row, "fldNpdidField")?.to_string(),
-                discovery_id: cell(row, "dscNpdidDiscovery")?.to_string(),
-                from: cell(row, "fldDiscoveryInclFromDate")
-                    .map(normalized_date)
-                    .filter(|date| valid_date(date)),
-                to: cell(row, "fldDiscoveryInclToDate")
-                    .map(normalized_date)
-                    .filter(|date| valid_date(date)),
-            })
-        })
-        .collect();
-    out.sort_by(|a, b| {
-        (&a.field_id, &a.discovery_id, &a.from, &a.to).cmp(&(
-            &b.field_id,
-            &b.discovery_id,
-            &b.from,
-            &b.to,
-        ))
-    });
-    out.dedup_by(|a, b| {
-        a.field_id == b.field_id
-            && a.discovery_id == b.discovery_id
-            && a.from == b.from
-            && a.to == b.to
-    });
-    out
-}
-
-fn memberships_by_field(memberships: &[Membership]) -> BTreeMap<&str, Vec<&Membership>> {
-    let mut out: BTreeMap<&str, Vec<&Membership>> = BTreeMap::new();
-    for membership in memberships {
-        out.entry(&membership.field_id)
-            .or_default()
-            .push(membership);
-    }
-    out
-}
-
-fn active_at(membership: &Membership, date: &str) -> bool {
-    membership.from.as_deref().is_some_and(|from| from <= date)
-        && membership.to.as_deref().is_none_or(|to| date < to)
 }
 
 fn redirect_map(rows: &[Row]) -> BTreeMap<String, String> {
@@ -968,77 +436,12 @@ fn volume_row(
         String::new(),
         String::new(),
         String::new(),
+        "individual".to_string(),
+        format!("discovery:{discovery_id}"),
+        serde_json::to_string(&[discovery_id]).expect("discovery ID serializes"),
+        "1".to_string(),
     ]);
     row
-}
-
-fn unresolved_row(discovery_id: &str, field_id: &str, method: &str, reason: &str) -> Vec<String> {
-    volume_row(
-        &format!(
-            "unresolved-{}",
-            digest(&format!("{discovery_id}|{field_id}|{method}|{reason}"))
-        ),
-        discovery_id,
-        discovery_id,
-        field_id,
-        true,
-        false,
-        method,
-        "unresolved",
-        "",
-        "",
-        "",
-        &[None; 5],
-        "",
-        "",
-        "",
-        "",
-        "",
-        0,
-        false,
-        reason,
-        "",
-    )
-}
-
-fn unresolved_row_with_evidence(
-    discovery_id: &str,
-    field_id: &str,
-    method: &str,
-    reason: &str,
-    after: &Snapshot,
-    before: &Snapshot,
-    signed: &str,
-) -> Vec<String> {
-    volume_row(
-        &format!(
-            "unresolved-{}",
-            digest(&format!(
-                "{discovery_id}|{}|{}|{reason}",
-                before.identity, after.identity
-            ))
-        ),
-        discovery_id,
-        discovery_id,
-        field_id,
-        true,
-        false,
-        method,
-        "unresolved",
-        "consecutive_original_recoverable_field_snapshots",
-        &after.date,
-        "",
-        &[None; 5],
-        "",
-        &after.identity,
-        &after.json,
-        &before.identity,
-        &before.json,
-        1,
-        after.conflict || before.conflict,
-        reason,
-        signed,
-    )
 }
 
 fn read_optional(path: &Path) -> Result<Vec<Row>> {
@@ -1109,6 +512,10 @@ fn write_rows(path: &Path, rows: &[Vec<String>]) -> Result<()> {
             "generation_source_url",
             "generation_source_publication_year",
             "generation_source_accessed_on",
+            "scope",
+            "aggregation_key",
+            "covered_discovery_ids",
+            "covered_discovery_count",
         ])
         .map_err(|error| SodirError::Csv(format!("header {}: {error}", tmp.display())))?;
     for row in rows {
@@ -1130,242 +537,101 @@ mod tests {
     }
 
     #[test]
-    fn reported_rows_dedupe_exactly_and_preserve_rc_redirect_and_conflicts() {
+    fn latest_field_reserves_are_shared_primary_with_stable_keys() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(tmp.path(), "discovery.csv", "dscNpdidDiscovery,dscNpdidResInclInDisc,fldNpdidField\n44786,,4467574\n45651,44786,4467574\n44492,,43645\n44552,44534,46437\n44534,,46437\n28543124,,34833026\n");
+        write(tmp.path(), "field_reserves.csv", "fldNpdidField,fldDateOffResEstDisplay,fldRecoverableOil,fldRecoverableGas,fldRecoverableNGL,fldRecoverableCondensate,fldRecoverableOE\n4467574,2024-12-31,15.66,44.09,10.765,0,80.204\n4467574,2025-12-31,15.938,44.782,10.547,0,80.759\n43645,2025-12-31,73.329,27.819,2.722,0,106.32\n46437,2025-12-31,299.596,1473.82,21.585,1.52,1815.948\n34833026,2025-12-31,3.782,5.049,0.534,0,9.846\n");
+        apply(tmp.path()).unwrap();
+        let rows = read_rows(&tmp.path().join(OUTPUT)).unwrap();
+        assert_eq!(rows.len(), 6);
+        for row in &rows {
+            assert_eq!(row["method"], "field_reserves_primary");
+            assert_eq!(row["scope"], "shared_field");
+            assert_eq!(row["coverage"], "field_total");
+        }
+        let gjoa: Vec<_> = rows
+            .iter()
+            .filter(|r| r["fldNpdidField"] == "4467574")
+            .collect();
+        assert_eq!(gjoa.len(), 2);
+        assert!(gjoa.iter().all(|r| r["recoverable_oe"] == "80.759"));
+        assert!(gjoa
+            .iter()
+            .all(|r| r["aggregation_key"] == "field:4467574:2025-12-31:original_recoverable"));
+        assert!(gjoa
+            .iter()
+            .all(|r| r["covered_discovery_ids"] == "[\"44786\",\"45651\"]"));
+        let expected = [
+            ("34833026", "9.846"),
+            ("43645", "106.32"),
+            ("46437", "1815.948"),
+        ];
+        for (field, oe) in expected {
+            assert!(rows
+                .iter()
+                .any(|r| r["fldNpdidField"] == field && r["recoverable_oe"] == oe));
+        }
+    }
+
+    #[test]
+    fn discovery_reserves_are_secondary_grouped_by_reporting_root_and_latest_date() {
         let tmp = tempfile::tempdir().unwrap();
         write(
             tmp.path(),
             "discovery.csv",
-            "dscNpdidDiscovery,dscNpdidResInclInDisc,fldNpdidField\n1,2,10\n2,,10\n",
+            "dscNpdidDiscovery,dscNpdidResInclInDisc,fldNpdidField\n1,,\n2,1,\n3,1,\n4,,\n",
         );
-        write(
-            tmp.path(),
-            "discovery_reserves.csv",
-            "OBJECTID,dscNpdidDiscovery,dscDateOffResEstDisplay,dscReservesRC,dscRecoverableOil,dscRecoverableGas,dscRecoverableNGL,dscRecoverableCondensate,dscRecoverableOe\n\
-             9,1,1767139200000,4F,10,,,,\n8,1,1767139200000,4F,10,,,,\n7,1,1767139200000,4F,11,,,,\n6,1,1767139200000,5F,0,0,0,0,0\n",
-        );
-        let report = apply(tmp.path()).unwrap();
-        assert_eq!(report.reported, 3);
+        write(tmp.path(),"discovery_reserves.csv","OBJECTID,dscNpdidDiscovery,dscDateOffResEstDisplay,dscReservesRC,dscRecoverableOil,dscRecoverableGas,dscRecoverableOe\n1,1,2024-12-31,4F,9,9,18\n2,1,2025-12-31,4F,0,,2\n3,1,2025-12-31,7F,1,2,3\n4,4,2025-12-31,7F,0,0,0\n");
+        apply(tmp.path()).unwrap();
         let rows = read_rows(&tmp.path().join(OUTPUT)).unwrap();
-        assert!(rows.iter().all(|row| row["dscNpdidDiscovery"] == "1"));
-        assert!(rows.iter().all(|row| row["raw_redirect_id"] == "2"));
+        let group: Vec<_> = rows
+            .iter()
+            .filter(|r| r["source_discovery_id"] == "1")
+            .collect();
+        assert_eq!(group.len(), 3);
+        assert!(group
+            .iter()
+            .all(|r| r["aggregation_key"] == "discovery:1:2025-12-31"
+                && r["scope"] == "reporting_group"));
+        assert!(group.iter().all(|r| r["recoverable_oil"] == "1"
+            && r["recoverable_gas"] == "2"
+            && r["recoverable_oe"] == "5"));
         let zero = rows
             .iter()
-            .find(|row| row["resource_class"] == "5F")
+            .find(|r| r["source_discovery_id"] == "4")
             .unwrap();
-        assert_eq!(zero["usable"], "false");
-        assert_eq!(zero["unresolved_reason"], "resources_reported_with_parent");
         assert_eq!(zero["recoverable_oil"], "0");
-        assert!(rows
-            .iter()
-            .filter(|row| row["resource_class"] == "4F")
-            .all(|row| row["conflict"] == "true"));
-        assert!(rows.iter().any(|row| row["source_duplicate_count"] == "2"));
-        assert!(rows
-            .iter()
-            .filter(|row| row["resource_class"] == "4F")
-            .all(|row| row["recoverable_gas"].is_empty()));
-        assert!(rows.iter().all(|row| row["estimate_date"] == "2025-12-31"));
+        assert_eq!(zero["recoverable_oe"], "0");
+        assert_eq!(zero["scope"], "individual");
     }
 
     #[test]
-    fn sole_discovery_gets_latest_original_recoverable_copy_without_zero_fill() {
+    fn field_component_blanks_remain_missing_and_do_not_fall_back() {
         let tmp = tempfile::tempdir().unwrap();
         write(
             tmp.path(),
             "discovery.csv",
-            "dscNpdidDiscovery,dscNpdidResInclInDisc,fldNpdidField\n1,,10\n",
+            "dscNpdidDiscovery,fldNpdidField\n1,10\n",
         );
-        write(
-            tmp.path(),
-            "field_discoveries_incl_hst.csv",
-            "fldNpdidField,dscNpdidDiscovery,fldDiscoveryInclFromDate,fldDiscoveryInclToDate\n10,1,1979-01-01,\n",
-        );
-        write(
-            tmp.path(),
-            "field_reserves.csv",
-            "OBJECTID,fldNpdidField,fldDateOffResEstDisplay,fldRecoverableOil,fldRecoverableGas,fldRecoverableNGL,fldRecoverableCondensate,fldRecoverableOE\n\
-             1,10,2024-12-31,700,300,,,1000\n2,10,2025-12-31,717.349,350.956,,,1068.305\n",
-        );
-        let report = apply(tmp.path()).unwrap();
-        assert_eq!(report.singleton_copies, 1);
-        let rows = read_rows(&tmp.path().join(OUTPUT)).unwrap();
-        let row = rows.iter().find(|row| row["usable"] == "true").unwrap();
-        assert_eq!(row["method"], "singleton_field_copy");
-        assert_eq!(row["estimate_date"], "2025-12-31");
-        assert_eq!(row["recoverable_oil"], "717.349");
-        assert_eq!(row["recoverable_gas"], "350.956");
-        assert!(row["recoverable_ngl"].is_empty());
-    }
-
-    #[test]
-    fn entrant_delta_is_signed_and_negative_change_is_unresolved() {
-        let tmp = tempfile::tempdir().unwrap();
-        write(
-            tmp.path(),
-            "discovery.csv",
-            "dscNpdidDiscovery,dscNpdidResInclInDisc,fldNpdidField\n1,,10\n2,,10\n3,,10\n",
-        );
-        write(
-            tmp.path(),
-            "field_discoveries_incl_hst.csv",
-            "fldNpdidField,dscNpdidDiscovery,fldDiscoveryInclFromDate,fldDiscoveryInclToDate\n\
-             10,1,1990-01-01,\n10,2,2021-06-01,\n10,3,2022-06-01,\n",
-        );
-        write(
-            tmp.path(),
-            "field_reserves.csv",
-            "fldNpdidField,fldDateOffResEstDisplay,fldRecoverableOil,fldRecoverableGas\n\
-             10,2020-12-31,100,100\n10,2021-12-31,120,130\n10,2022-12-31,110,150\n",
-        );
-        let report = apply(tmp.path()).unwrap();
-        assert_eq!(report.inclusion_deltas, 1);
-        assert_eq!(report.unresolved, 4);
-        let rows = read_rows(&tmp.path().join(OUTPUT)).unwrap();
-        let delta = rows
-            .iter()
-            .find(|row| {
-                row["dscNpdidDiscovery"] == "2" && row["method"] == "single_entrant_positive_delta"
-            })
-            .unwrap();
-        assert_eq!(delta["recoverable_oil"], "20");
-        assert_eq!(delta["recoverable_gas"], "30");
-        let unresolved = rows
-            .iter()
-            .find(|row| {
-                row["dscNpdidDiscovery"] == "3" && row["method"] == "single_entrant_positive_delta"
-            })
-            .unwrap();
-        assert_eq!(unresolved["usable"], "false");
-        assert_eq!(unresolved["unresolved_reason"], "negative_component_delta");
-        assert!(unresolved["recoverable_oil"].is_empty());
-        assert!(unresolved["signed_deltas_json"].contains("-10"));
-    }
-
-    #[test]
-    fn troll_allocation_reconciles_latest_snapshot_and_rejects_direct_overlap() {
-        let tmp = tempfile::tempdir().unwrap();
-        write(tmp.path(), "discovery.csv", "dscNpdidDiscovery,dscNpdidResInclInDisc,fldNpdidField\n44552,44534,46437\n44534,,46437\n");
-        write(tmp.path(), "field_discoveries_incl_hst.csv", "fldNpdidField,dscNpdidDiscovery,fldDiscoveryInclFromDate,fldDiscoveryInclToDate\n46437,44552,1990-01-01,\n46437,44534,1990-01-01,\n");
-        write(tmp.path(), "field_reserves.csv", "OBJECTID,fldNpdidField,fldDateOffResEstDisplay,fldRecoverableOil,fldRecoverableGas,fldRecoverableNGL,fldRecoverableCondensate,fldRecoverableOE\n1,46437,2024-12-31,100,300,30,3,433\n2,46437,2025-12-31,120,330,33,6,489\n");
-        let report = apply(tmp.path()).unwrap();
-        assert_eq!(report.unresolved, 0);
-        let rows = read_rows(&tmp.path().join(OUTPUT)).unwrap();
-        assert_eq!(rows.len(), 2);
-        let east = rows
-            .iter()
-            .find(|row| row["dscNpdidDiscovery"] == TROLL_EAST)
-            .unwrap();
-        let west = rows
-            .iter()
-            .find(|row| row["dscNpdidDiscovery"] == TROLL_WEST)
-            .unwrap();
-        assert_eq!(east["method"], "troll_published_component_allocation");
-        assert_eq!(east["raw_redirect_id"], TROLL_WEST);
-        assert_eq!(east["recoverable_oil"], "0");
-        assert_eq!(east["recoverable_gas"].parse::<f64>().unwrap(), 220.0);
-        assert_eq!(west["recoverable_oil"], "120");
-        assert_eq!(west["recoverable_gas"].parse::<f64>().unwrap(), 110.0);
-        assert_eq!(
-            east["recoverable_oe"].parse::<f64>().unwrap()
-                + west["recoverable_oe"].parse::<f64>().unwrap(),
-            489.0
-        );
-
+        write(tmp.path(),"field_reserves.csv","fldNpdidField,fldDateOffResEstDisplay,fldRecoverableOil,fldRecoverableGas,fldRecoverableOE\n10,2025-12-31,,0,5\n");
         write(
             tmp.path(),
             "discovery_reserves.csv",
-            "dscNpdidDiscovery,dscDateOffResEstDisplay,dscRecoverableOil\n44552,2025-12-31,1\n",
+            "dscNpdidDiscovery,dscDateOffResEstDisplay,dscRecoverableOil\n1,2025-12-31,99\n",
         );
-        apply(tmp.path()).unwrap();
-        let rows = read_rows(&tmp.path().join(OUTPUT)).unwrap();
-        assert!(!rows.iter().any(
-            |row| row["method"] == "troll_published_component_allocation"
-                && row["usable"] == "true"
-        ));
-        assert!(rows
-            .iter()
-            .any(|row| row["unresolved_reason"] == "reported_overlap"));
-    }
-
-    #[test]
-    fn gjoa_nord_zero_parent_observation_is_unusable_and_midpoint_is_component_null() {
-        let tmp = tempfile::tempdir().unwrap();
-        write(tmp.path(), "discovery.csv", "dscNpdidDiscovery,dscName,dscNpdidResInclInDisc,fldNpdidField\n45651,35/9-3 (Gjøa Nord),44786,4467574\n44786,35/9-1 Gjøa,,4467574\n");
-        write(tmp.path(), "discovery_reserves.csv", "dscNpdidDiscovery,dscDateOffResEstDisplay,dscReservesRC,dscRecoverableOil,dscRecoverableGas,dscRecoverableNGL,dscRecoverableCondensate,dscRecoverableOe\n45651,2025-12-31,5F,0,0,0,0,0\n");
-        apply(tmp.path()).unwrap();
-        let rows = read_rows(&tmp.path().join(OUTPUT)).unwrap();
-        let source = rows
-            .iter()
-            .find(|row| row["method"] == "reported_observation")
-            .unwrap();
-        assert_eq!(source["usable"], "false");
-        assert_eq!(
-            source["unresolved_reason"],
-            "resources_reported_with_parent"
-        );
-        assert_eq!(source["recoverable_oe"], "0");
-        let midpoint = rows
-            .iter()
-            .find(|row| row["method"] == "published_resource_range_midpoint")
-            .unwrap();
-        assert_eq!(midpoint["usable"], "true");
-        assert_eq!(midpoint["estimate_date"], "2022-05-12");
-        assert_eq!(midpoint["recoverable_oe"], "2.8");
-        assert!(midpoint["recoverable_oil"].is_empty());
-        assert!(midpoint["recoverable_gas"].is_empty());
-        assert!(midpoint["source_record_json"].contains("million_sm3_oil_equivalent"));
-
-        write(tmp.path(), "discovery.csv", "dscNpdidDiscovery,dscName,dscNpdidResInclInDisc,fldNpdidField\n45651,35/9-3 (Gjøa Nord),44786,999\n44786,35/9-1 Gjøa,,4467574\n");
-        apply(tmp.path()).unwrap();
-        let rows = read_rows(&tmp.path().join(OUTPUT)).unwrap();
-        assert!(!rows
-            .iter()
-            .any(|row| row["method"] == "published_resource_range_midpoint"));
-
-        write(tmp.path(), "discovery.csv", "dscNpdidDiscovery,dscName,dscNpdidResInclInDisc,fldNpdidField\n45651,35/9-3 (Gjøa Nord),44786,4467574\n44786,35/9-1 Gjøa,,4467574\n");
-        write(tmp.path(), "discovery_reserves.csv", "dscNpdidDiscovery,dscDateOffResEstDisplay,dscReservesRC,dscRecoverableOil,dscRecoverableGas,dscRecoverableNGL,dscRecoverableCondensate,dscRecoverableOe\n45651,2025-12-31,5F,0,0,0,0,1\n");
-        apply(tmp.path()).unwrap();
-        let rows = read_rows(&tmp.path().join(OUTPUT)).unwrap();
-        assert!(!rows
-            .iter()
-            .any(|row| row["method"] == "published_resource_range_midpoint"));
-    }
-
-    #[test]
-    fn published_range_midpoint_has_stable_decimal_precision() {
-        use crate::sodir::estimates::{EstimateValue, Unit};
-        let value = EstimateValue {
-            unit: Unit::MillionSm3OilEquivalent,
-            point: None,
-            minimum: Some(2.7),
-            maximum: Some(7.4),
-            preliminary: true,
-        };
-        assert_eq!(
-            estimate_value(Some(value), Unit::MillionSm3OilEquivalent),
-            Some(5.05)
-        );
-    }
-
-    #[test]
-    fn duva_published_estimate_emits_one_dated_oe_midpoint_with_null_components() {
-        let tmp = tempfile::tempdir().unwrap();
-        write(tmp.path(), "discovery.csv", "dscNpdidDiscovery,dscName,dscNpdidResInclInDisc,fldNpdidField\n28543124,36/7-4 Duva,,34833026\n");
         apply(tmp.path()).unwrap();
         let rows = read_rows(&tmp.path().join(OUTPUT)).unwrap();
         assert_eq!(rows.len(), 1);
-        let row = &rows[0];
-        assert_eq!(row["method"], "published_resource_range_midpoint");
-        assert_eq!(
-            row["basis"],
-            "newest_applicable_published_discovery_estimate"
+        assert_eq!(rows[0]["method"], "field_reserves_primary");
+        assert!(rows[0]["recoverable_oil"].is_empty());
+        assert_eq!(rows[0]["recoverable_gas"], "0");
+
+        write(
+            tmp.path(),
+            "field_reserves.csv",
+            "fldNpdidField,fldDateOffResEstDisplay,fldRecoverableOil,fldRecoverableOE\n10,2025-12-31,1,5\n10,2025-12-31,2,5\n",
         );
-        assert_eq!(row["estimate_date"], "2016-09-16");
-        assert_eq!(row["recoverable_oe"], "7.65");
-        assert!(row["recoverable_oil"].is_empty());
-        assert!(row["recoverable_gas"].is_empty());
-        assert!(row["recoverable_ngl"].is_empty());
-        assert!(row["recoverable_condensate"].is_empty());
-        assert!(row["source_record_json"].contains("7988"));
+        apply(tmp.path()).unwrap();
+        assert!(read_rows(&tmp.path().join(OUTPUT)).unwrap().is_empty());
     }
 }

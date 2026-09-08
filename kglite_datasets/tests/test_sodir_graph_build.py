@@ -9,6 +9,7 @@ import shutil
 
 from kglite_datasets import _sodir_internal
 from kglite_datasets._cache import load_cached_graph
+from kglite_datasets.sodir import wrapper
 from kglite_datasets.sodir.wrapper import (
     PACKAGED_BLUEPRINT,
     SOURCE_META_FILENAME,
@@ -47,6 +48,49 @@ def test_disk_blueprint_build_saves_and_reopens(tmp_path: Path) -> None:
 
     assert reopened is not None
     assert reopened.cypher("MATCH (n:Licence) RETURN n.title AS title ORDER BY title").to_list() == before
+
+
+def test_relative_workdir_is_not_resolved_twice(tmp_path: Path, monkeypatch) -> None:
+    workdir = tmp_path / "relative"
+    csv_dir = workdir / "csv"
+    csv_dir.mkdir(parents=True)
+    shutil.copyfile(FIXTURE, csv_dir / FIXTURE.name)
+    monkeypatch.chdir(tmp_path)
+    graph = _build_graph(
+        Path("relative").resolve(),
+        {
+            "nodes": {
+                "Licence": {
+                    "csv": f"csv/{FIXTURE.name}",
+                    "pk": "ptlPetregLicenceID",
+                    "title": "ptlName",
+                }
+            }
+        },
+        "memory",
+        None,
+        False,
+    )
+    assert graph.cypher("MATCH (n:Licence) RETURN count(n) AS count").to_list() == [{"count": 2}]
+
+
+def test_open_normalizes_relative_workdir_before_refresh_and_build(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    seen = []
+    monkeypatch.setattr(wrapper, "_resolve_blueprint", lambda *_args: '{"nodes": {}}')
+    monkeypatch.setattr(
+        wrapper._sodir_internal,
+        "refresh",
+        lambda path, *_args, **_kwargs: seen.append(Path(path)) or {"fetched": []},
+    )
+    sentinel = object()
+    monkeypatch.setattr(
+        wrapper,
+        "_build_graph",
+        lambda path, *_args: seen.append(path) or sentinel,
+    )
+    assert wrapper.open("relative", verbose=False) is sentinel
+    assert seen == [tmp_path / "relative", tmp_path / "relative"]
 
 
 def test_discovery_play_membership_and_existing_joins(tmp_path: Path) -> None:
@@ -157,15 +201,20 @@ def test_discovery_play_membership_and_existing_joins(tmp_path: Path) -> None:
     assert graph.cypher(
         "MATCH (v:DiscoveryVolume)-[:OF_DISCOVERY]->(d:Discovery) "
         "RETURN d.title AS discovery, v.generated AS generated, v.method AS method, "
-        "v.recoverable_oil AS oil, v.recoverable_gas AS gas, v.recoverable_ngl AS ngl"
+        "v.recoverable_oil AS oil, v.recoverable_gas AS gas, v.recoverable_ngl AS ngl, "
+        "v.scope AS scope, v.aggregation_key AS aggregation_key, "
+        "v.covered_discovery_ids AS covered"
     ).to_list() == [
         {
             "discovery": "NJU-style",
             "generated": True,
-            "method": "singleton_field_copy",
+            "method": "field_reserves_primary",
             "oil": 10.0,
             "gas": 20.0,
             "ngl": None,
+            "scope": "shared_field",
+            "aggregation_key": "field:500:2025-12-31:original_recoverable",
+            "covered": ["10"],
         }
     ]
 

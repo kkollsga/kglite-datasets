@@ -124,16 +124,12 @@ fn refresh(
         report.preprocess.discovery_play.field_links,
     )?;
     pp.set_item(
-        "discovery_volume_reported",
-        report.preprocess.discovery_volume.reported,
+        "discovery_volume_field_primary",
+        report.preprocess.discovery_volume.field_primary,
     )?;
     pp.set_item(
-        "discovery_volume_singleton_copies",
-        report.preprocess.discovery_volume.singleton_copies,
-    )?;
-    pp.set_item(
-        "discovery_volume_inclusion_deltas",
-        report.preprocess.discovery_volume.inclusion_deltas,
+        "discovery_volume_discovery_secondary",
+        report.preprocess.discovery_volume.discovery_secondary,
     )?;
     pp.set_item(
         "discovery_volume_unresolved",

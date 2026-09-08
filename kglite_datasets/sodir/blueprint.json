@@ -1941,7 +1941,11 @@
         "generation_parameters_json": "string",
         "generation_source_url": "string",
         "generation_source_publication_year": "int",
-        "generation_source_accessed_on": "date"
+        "generation_source_accessed_on": "date",
+        "scope": "string",
+        "aggregation_key": "string",
+        "covered_discovery_ids": "list",
+        "covered_discovery_count": "int"
       },
       "skipped": [
         "dscNpdidDiscovery",

@@ -65,53 +65,38 @@ plays overlap and must not be summed into an estate-wide total.
 
 ## Discovery volumes
 
-`DiscoveryVolume` provides a common observation shape linked by `OF_DISCOVERY`.
-The source `DiscoveryReserves` and `FieldReserves` nodes remain unchanged.
-Every observation carries its method, coverage, basis, estimate date, source
-record provenance and `generated`/`usable` flags. Missing or unresolved values
-stay null; inspect `unresolved_reason` rather than treating them as zero.
+`DiscoveryVolume` provides one selected source hierarchy for volume queries. If
+a discovery belongs to a field with a valid reserve snapshot, the latest
+`FieldReserves` original-recoverable values are primary. Every constituent gets
+a link to the same field snapshot for play reachability, and every copy carries
+the same `aggregation_key`; deduplicate that key within each play. The row has
+`method=field_reserves_primary`, `scope=shared_field`, and
+`coverage=field_total`. It is field context, not a constituent allocation.
 
-Reported observations retain their resource classes and redirects. Generated
-methods include latest original recoverable field estimates for strict
-single-discovery fields, and explicitly separate inclusion-window change
-estimates where a single entrant can be isolated. These bases are not
-interchangeable: an annual reserve change is not a current discovery resource
-estimate, and a reported contingent component is not necessarily a whole-field
-total. Do not sum every date, class and method together.
+Only when no field snapshot exists does the loader use the latest dated
+`DiscoveryReserves` records. Distinct resource-class rows on that date are
+combined after exact duplicate removal; blanks remain null and numeric zero
+remains zero. A conflicting or entirely empty latest field snapshot remains
+missing rather than falling through component-by-component. Redirected discoveries share their terminal reporting root's
+`aggregation_key` and covered-ID list. Conflicting records remain unusable.
+Raw `FieldReserves` and `DiscoveryReserves` nodes and source JSON provenance are
+preserved.
 
-Redirected observations whose complete component set is zero remain source
-records but are unusable as `resources_reported_with_parent`. When no usable
-structured observation exists, a verified published drilling-report estimate
-may supply the newest applicable sourced point or range midpoint. The bounded
-initial catalog contains four verified preliminary drilling-report ranges:
-Gjøa Nord, Gjengalunden, Røver Sør, and Duva. Gjøa Nord's 2022 2.2–3.4 million
-Sm³ OE range becomes a 2.8 midpoint, while Duva's dated 2016 4.3–11.0 range
-becomes 7.65. Their oil, gas, NGL and condensate stay null. These dated
-whole-discovery estimates are distinct from later field reserve snapshots and
-must not be presented as current field allocations.
-
-Troll has a curated approximate allocation: two-thirds of gas-associated
-components go to East, and oil to West. The published gas proportion comes
-from [SODIR's resource report](https://www.sodir.no/aktuelt/publikasjoner/rapporter/ressursrapporter/ressursrapport-2024/gjenvarende-ressurser/);
-the oil allocation, liquids following gas, and carrying the ratio to a later
-snapshot are explicit assumptions. Both generated observations reconcile to
-the latest source field total. Structural changes or conflicting source
-observations prevent the allocation and produce a reason for review.
+Do not sum repeated field keys, and do not sum totals between plays: the same
+field can be represented by discoveries in several plays. For chronology, use
+the earliest designated discovery-well completion date among the field's
+matched discoveries in the selected play. Later discoveries are timing markers,
+not another copy of the field volume. Missing components remain missing; no
+component falls through to the secondary source.
 
 ```python
 g.cypher(
     "MATCH (v:DiscoveryVolume)-[:OF_DISCOVERY]->(d:Discovery) "
     "WHERE v.usable = true "
-    "RETURN d.title, v.recoverable_oe, v.generated, v.method, "
-    "v.basis, v.estimate_date LIMIT 20"
+    "RETURN d.title, v.recoverable_oe, v.method, v.scope, "
+    "v.aggregation_key, v.estimate_date LIMIT 20"
 )
 ```
-
-For discovery chronology, use the designated well's `wlbCompletionDate` via
-`DISCOVERED_BY`, keeping the source `dscDiscoveryYear` for comparison. This
-completion date is distinct from the resource estimate date: a curve of
-current estimates ordered by discovery date is not a history of estimates
-known at the time of discovery.
 
 ## What the blueprint deliberately leaves out
 

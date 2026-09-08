@@ -8,6 +8,13 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 
 ### Added
 
+- `DiscoveryVolume` now uses a simple source hierarchy: the latest structured
+  `FieldReserves` snapshot is primary for every associated discovery, with one
+  shared aggregation key that consumers deduplicate within a play. Only
+  discoveries without a field snapshot use their latest structured
+  `DiscoveryReserves` rows. Raw source values, resource classes, redirects,
+  missing components, numeric zeros, dates, and row provenance remain explicit.
+
 - Sodir now assigns every matching `Discovery -[:IN_PLAY]-> Play`
   relationship. Published discovery examples are authoritative, and all
   age-compatible polygons containing the designated well are retained across
@@ -16,28 +23,6 @@ semantic versioning (workspace version in the root `Cargo.toml`).
   no cutoff. `CANDIDATE_PLAY` retains only unassigned alternatives. Published
   `Field IN_PLAY` facts remain field-scoped and retain their source URL and
   access date; field affiliation alone never assigns a discovery.
-- `DiscoveryVolume` provides one query shape for original reported discovery
-  reserves and conservative generated observations. It copies the latest field
-  snapshot only for strict sole-discovery histories, keeps missing values null,
-  and records conflicts, redirects, overlaps, membership changes, signed deltas,
-  and source rows as explicit provenance or unresolved evidence. Existing source
-  nodes and reserve values remain unchanged.
-- Troll East and West receive a narrowly qualified generated component
-  allocation from the latest original field snapshot. The estimate assigns all
-  oil to West and applies the published approximate two-thirds East gas share
-  to gas, NGL, condensate, and non-oil OE; West receives the exact remainder.
-  The rows preserve the internal resource redirect, source snapshot, ratio,
-  assumptions, publication URL/year, and access date, and remain unresolved if
-  the constituent, redirect, direct-observation, interval, or snapshot checks
-  fail.
-- Redirected discovery reserve rows whose complete component set is zero remain
-  present but are marked unusable as `resources_reported_with_parent`; this
-  avoids treating reporting-group placeholders as evidence of no resources.
-  A bounded initial catalog provides sourced range midpoints for four verified
-  discoveries: Gjøa Nord, Gjengalunden, Røver Sør, and Duva. Gjøa Nord carries the
-  dated 2022 preliminary 2.2–3.4 million Sm³ OE midpoint as a generated 2.8
-  million Sm³ OE observation, with component values left null and full
-  range/source provenance retained.
 
 ## [0.1.16] - 2026-09-08
 
