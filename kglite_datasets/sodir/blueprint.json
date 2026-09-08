@@ -495,7 +495,8 @@
         "wlbDateUpdated": "date",
         "wkt_geometry": "geometry",
         "latitude": "location.lat",
-        "longitude": "location.lon"
+        "longitude": "location.lon",
+        "wlbPressReleaseUrl": "string"
       },
       "skipped": [
         "OBJECTID",
@@ -537,7 +538,6 @@
         "wlbNsMin",
         "wlbNsSec",
         "wlbNsUtm",
-        "wlbPressReleaseUrl",
         "wlbUtmZone"
       ],
       "connections": {

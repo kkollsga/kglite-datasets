@@ -204,7 +204,7 @@ fn emit_published_estimates(
             true,
             "published_resource_range_midpoint",
             "published_whole_discovery_estimate",
-            "newest_applicable_published_appraisal",
+            "newest_applicable_published_discovery_estimate",
             estimate.estimate_date,
             "",
             &values,
@@ -1345,5 +1345,27 @@ mod tests {
             estimate_value(Some(value), Unit::MillionSm3OilEquivalent),
             Some(5.05)
         );
+    }
+
+    #[test]
+    fn duva_published_estimate_emits_one_dated_oe_midpoint_with_null_components() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(tmp.path(), "discovery.csv", "dscNpdidDiscovery,dscName,dscNpdidResInclInDisc,fldNpdidField\n28543124,36/7-4 Duva,,34833026\n");
+        apply(tmp.path()).unwrap();
+        let rows = read_rows(&tmp.path().join(OUTPUT)).unwrap();
+        assert_eq!(rows.len(), 1);
+        let row = &rows[0];
+        assert_eq!(row["method"], "published_resource_range_midpoint");
+        assert_eq!(
+            row["basis"],
+            "newest_applicable_published_discovery_estimate"
+        );
+        assert_eq!(row["estimate_date"], "2016-09-16");
+        assert_eq!(row["recoverable_oe"], "7.65");
+        assert!(row["recoverable_oil"].is_empty());
+        assert!(row["recoverable_gas"].is_empty());
+        assert!(row["recoverable_ngl"].is_empty());
+        assert!(row["recoverable_condensate"].is_empty());
+        assert!(row["source_record_json"].contains("7988"));
     }
 }

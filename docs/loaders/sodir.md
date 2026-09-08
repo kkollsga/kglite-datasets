@@ -81,11 +81,14 @@ total. Do not sum every date, class and method together.
 
 Redirected observations whose complete component set is zero remain source
 records but are unusable as `resources_reported_with_parent`. When no usable
-structured observation exists, a verified whole-discovery appraisal estimate
+structured observation exists, a verified published drilling-report estimate
 may supply the newest applicable sourced point or range midpoint. The bounded
-initial catalog contains three verified preliminary drilling-report ranges:
-Gjøa Nord, Gjengalunden, and Røver Sør. Gjøa Nord's 2022 2.2–3.4 million Sm³
-OE range becomes a 2.8 midpoint while oil, gas, NGL and condensate stay null.
+initial catalog contains four verified preliminary drilling-report ranges:
+Gjøa Nord, Gjengalunden, Røver Sør, and Duva. Gjøa Nord's 2022 2.2–3.4 million
+Sm³ OE range becomes a 2.8 midpoint, while Duva's dated 2016 4.3–11.0 range
+becomes 7.65. Their oil, gas, NGL and condensate stay null. These dated
+whole-discovery estimates are distinct from later field reserve snapshots and
+must not be presented as current field allocations.
 
 Troll has a curated approximate allocation: two-thirds of gas-associated
 components go to East, and oil to West. The published gas proportion comes

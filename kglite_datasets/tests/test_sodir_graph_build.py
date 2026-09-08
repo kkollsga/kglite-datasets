@@ -53,12 +53,12 @@ def test_discovery_play_membership_and_existing_joins(tmp_path: Path) -> None:
     csv_dir = tmp_path / "csv"
     csv_dir.mkdir()
     (csv_dir / "discovery.csv").write_text(
-        "dscNpdidDiscovery,dscName,wlbNpdidWellbore,fldNpdidField\n10,NJU-style,100,500\n"
+        "dscNpdidDiscovery,dscName,wlbNpdidWellbore,fldNpdidField\n10,NJU-style,7988,500\n"
     )
     (csv_dir / "wellbore.csv").write_text(
         "wlbNpdidWellbore,wlbWellboreName,dscNpdidDiscovery,fldNpdidField,"
-        "wlbAgeWithHc1,wlbAgeWithHc2,wlbAgeWithHc3,wkt_geometry\n"
-        "100,SYNTH-1,10,500,EARLY JURASSIC,INDETERMINATE,,POINT (2 61)\n"
+        "wlbAgeWithHc1,wlbAgeWithHc2,wlbAgeWithHc3,wkt_geometry,wlbPressReleaseUrl\n"
+        "7988,SYNTH-1,10,500,EARLY JURASSIC,INDETERMINATE,,POINT (2 61),https://factpages.sodir.no/pbl/wellbore_press_releases/7988-36-7-4.pdf\n"
     )
     (csv_dir / "field.csv").write_text("fldNpdidField,fldName\n500,Synthetic field\n")
     (csv_dir / "field_discoveries_incl_hst.csv").write_text(
@@ -151,6 +151,9 @@ def test_discovery_play_membership_and_existing_joins(tmp_path: Path) -> None:
         "MATCH (d:Discovery)-[:DISCOVERED_BY]->(w:Wellbore)-[:IN_FIELD]->(f:Field) "
         "RETURN w.title AS well, f.title AS field"
     ).to_list() == [{"well": "SYNTH-1", "field": "Synthetic field"}]
+    assert graph.cypher(
+        "MATCH (w:Wellbore) WHERE w.wlbNpdidWellbore = 7988 RETURN w.wlbPressReleaseUrl AS url"
+    ).to_list() == [{"url": "https://factpages.sodir.no/pbl/wellbore_press_releases/7988-36-7-4.pdf"}]
     assert graph.cypher(
         "MATCH (v:DiscoveryVolume)-[:OF_DISCOVERY]->(d:Discovery) "
         "RETURN d.title AS discovery, v.generated AS generated, v.method AS method, "

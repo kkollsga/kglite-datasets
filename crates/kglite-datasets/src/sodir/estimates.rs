@@ -49,6 +49,7 @@ pub struct PublishedDiscoveryEstimate {
 const GJOA_NORD_URL: &str = "https://www.sodir.no/en/whats-new/news/exploration-drilling-results/2022/delineation-of-oil-and-gas-discovery-near-the-gjoa-field-in-the-north-sea--359-16-s-and-359-16-a/";
 const GJENGALUNDEN_URL: &str = "https://www.sodir.no/aktuelt/nyheter/resultat-av-leteboring/2023/oljefunn-nar-ivar-aasen-feltet-i-nordsjoen/";
 const ROVER_SOR_URL: &str = "https://www.sodir.no/en/whats-new/news/Exploration-drilling-results/2023/oil-and-gas-discovery-near-the-troll-field-in-the-north-sea/";
+const DUVA_URL: &str = "https://factpages.sodir.no/pbl/wellbore_press_releases/7988-36-7-4.pdf";
 
 pub const PUBLISHED_DISCOVERY_ESTIMATES: &[PublishedDiscoveryEstimate] = &[
     PublishedDiscoveryEstimate {
@@ -109,6 +110,26 @@ pub const PUBLISHED_DISCOVERY_ESTIMATES: &[PublishedDiscoveryEstimate] = &[
             preliminary: true,
         }),
         source_url: ROVER_SOR_URL,
+        accessed_on: "2026-09-08",
+    },
+    PublishedDiscoveryEstimate {
+        discovery_id: 28543124,
+        discovery_name: "36/7-4 Duva",
+        estimate_date: "2016-09-16",
+        scope: EstimateScope::WholeDiscovery,
+        source_well_ids: &[7988],
+        recoverable_oil: None,
+        recoverable_gas: None,
+        recoverable_ngl: None,
+        recoverable_condensate: None,
+        recoverable_oe: Some(EstimateValue {
+            unit: Unit::MillionSm3OilEquivalent,
+            point: None,
+            minimum: Some(4.3),
+            maximum: Some(11.0),
+            preliminary: true,
+        }),
+        source_url: DUVA_URL,
         accessed_on: "2026-09-08",
     },
 ];
@@ -174,8 +195,8 @@ mod tests {
     }
 
     #[test]
-    fn bounded_catalog_has_three_exact_primary_source_records() {
-        assert_eq!(PUBLISHED_DISCOVERY_ESTIMATES.len(), 3);
+    fn bounded_catalog_has_four_exact_primary_source_records() {
+        assert_eq!(PUBLISHED_DISCOVERY_ESTIMATES.len(), 4);
         assert_eq!(
             newest_applicable_estimate("25/10-17 S", 42148344)
                 .unwrap()
@@ -188,6 +209,16 @@ mod tests {
                 .source_well_ids,
             &[9663, 9664]
         );
+    }
+
+    #[test]
+    fn duva_uses_the_whole_discovery_well_report() {
+        let estimate = newest_applicable_estimate("36/7-4 Duva", 28543124).unwrap();
+        assert_eq!(estimate.estimate_date, "2016-09-16");
+        assert_eq!(estimate.source_well_ids, &[7988]);
+        let oe = estimate.recoverable_oe.unwrap();
+        assert_eq!((oe.minimum, oe.maximum), (Some(4.3), Some(11.0)));
+        assert!(estimate.recoverable_oil.is_none());
     }
 
     #[test]

@@ -33,8 +33,8 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 - Redirected discovery reserve rows whose complete component set is zero remain
   present but are marked unusable as `resources_reported_with_parent`; this
   avoids treating reporting-group placeholders as evidence of no resources.
-  A bounded initial catalog provides sourced range midpoints for three verified
-  discoveries: Gjøa Nord, Gjengalunden, and Røver Sør. Gjøa Nord carries the
+  A bounded initial catalog provides sourced range midpoints for four verified
+  discoveries: Gjøa Nord, Gjengalunden, Røver Sør, and Duva. Gjøa Nord carries the
   dated 2022 preliminary 2.2–3.4 million Sm³ OE midpoint as a generated 2.8
   million Sm³ OE observation, with component values left null and full
   range/source provenance retained.

@@ -10,7 +10,7 @@ use wkt::Wkt;
 use crate::sodir::ages::{self, Compatibility};
 use crate::sodir::error::{Result, SodirError};
 
-pub const VERSION: u32 = 10;
+pub const VERSION: u32 = 12;
 const OUTPUT: &str = "_derived_discovery_play.csv";
 const CANDIDATE_OUTPUT: &str = "_derived_discovery_play_candidate.csv";
 const FIELD_OUTPUT: &str = "_derived_field_play.csv";
