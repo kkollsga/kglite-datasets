@@ -405,10 +405,22 @@ fn grouped_snapshots(
 }
 
 fn latest_snapshot(rows: &[&Row], date_column: &str, field: bool) -> Option<Snapshot> {
-    let latest_date = rows
+    let dates: BTreeSet<String> = rows
         .iter()
         .filter_map(|row| cell(row, date_column).and_then(normalized_valid_date))
-        .max()?;
+        .collect();
+    dates
+        .into_iter()
+        .rev()
+        .find_map(|date| snapshot_at_date(rows, date_column, field, date))
+}
+
+fn snapshot_at_date(
+    rows: &[&Row],
+    date_column: &str,
+    field: bool,
+    date: String,
+) -> Option<Snapshot> {
     let mut latest: Vec<&Row> = rows
         .iter()
         .copied()
@@ -416,7 +428,7 @@ fn latest_snapshot(rows: &[&Row], date_column: &str, field: bool) -> Option<Snap
             cell(row, date_column)
                 .and_then(normalized_valid_date)
                 .as_deref()
-                == Some(latest_date.as_str())
+                == Some(date.as_str())
         })
         .collect();
     latest.sort_by_key(|row| row_json(row));
@@ -458,7 +470,7 @@ fn latest_snapshot(rows: &[&Row], date_column: &str, field: bool) -> Option<Snap
         .filter_map(|row| cell(row, "dscReservesRC"))
         .collect();
     Some(Snapshot {
-        date: latest_date,
+        date,
         values: components,
         identity: digest(&source_json),
         json: source_json,
@@ -823,6 +835,56 @@ mod tests {
         assert_eq!(rows[0]["method"], "discovery_reserves");
         assert_eq!(rows[0]["recoverable_oil"], "0");
         assert_eq!(rows[0]["recoverable_gas"], "2");
+    }
+
+    #[test]
+    fn discovery_volume_uses_latest_valid_snapshot() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            tmp.path(),
+            "discovery.csv",
+            "dscNpdidDiscovery,fldNpdidField\n1,10\n",
+        );
+        write(
+            tmp.path(),
+            "discovery_reserves.csv",
+            "dscNpdidDiscovery,dscDateOffResEstDisplay,dscRecoverableOil\n1,2024-12-31,5\n1,2025-12-31,\n",
+        );
+        write(
+            tmp.path(),
+            "field_reserves.csv",
+            "fldNpdidField,fldDateOffResEstDisplay,fldRecoverableOil\n10,2025-12-31,9\n",
+        );
+
+        let report = apply(tmp.path()).unwrap();
+        let rows = rows(tmp.path());
+        assert_eq!(report.discovery, 1);
+        assert_eq!(report.field_fallback, 0);
+        assert_eq!(rows[0]["method"], "discovery_reserves");
+        assert_eq!(rows[0]["estimate_date"], "2024-12-31");
+        assert_eq!(rows[0]["recoverable_oil"], "5");
+    }
+
+    #[test]
+    fn field_volume_uses_latest_valid_snapshot() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            tmp.path(),
+            "discovery.csv",
+            "dscNpdidDiscovery,fldNpdidField\n1,10\n",
+        );
+        write(
+            tmp.path(),
+            "field_reserves.csv",
+            "fldNpdidField,fldDateOffResEstDisplay,fldRecoverableOil\n10,2024-12-31,7\n10,2025-12-31,\n",
+        );
+
+        let report = apply(tmp.path()).unwrap();
+        let rows = rows(tmp.path());
+        assert_eq!(report.field_fallback, 1);
+        assert_eq!(rows[0]["method"], "field_reserves_fallback");
+        assert_eq!(rows[0]["estimate_date"], "2024-12-31");
+        assert_eq!(rows[0]["recoverable_oil"], "7");
     }
 
     #[test]
