@@ -1,6 +1,6 @@
 //! Pure-Rust Sodir FactMaps REST loader for kglite knowledge graphs.
 //!
-//! [transform] Extracted from `kglite::datasets::sodir` (kglite ≤ 0.13.x) via
+//! \[transform\] Extracted from `kglite::datasets::sodir` (kglite ≤ 0.13.x) via
 //! the mechanical `crate::datasets::` → `crate::` rewrite; the module had zero
 //! engine coupling. This module is engine-free (no PyO3); the Python bindings
 //! live in the sibling `kglite-datasets-py` crate and the Python-facing API is

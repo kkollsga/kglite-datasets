@@ -30,14 +30,14 @@ MATURIN   := $(VENV)/bin/maturin
 # Dev toolchain. `kglite` is the runtime engine dependency (see pyproject
 # `dependencies`); the rest are what the gate itself needs. Keep in sync with
 # the CI workflow's install steps.
-DEV_DEPS  := maturin pytest ruff "kglite>=0.17.1"
+DEV_DEPS  := maturin pytest ruff "kglite>=0.17.3"
 # Every Python path ruff owns. One list, referenced by check and format alike,
 # so the two can never drift apart and silently stop covering a directory.
 PY_PATHS  := kglite_datasets benchmarks
 
 .PHONY: gate lint lint-rust lint-py fmt fmt-check clippy ruff-check ruff-fix \
         build test determinism bench-smoke bench venv develop pytest clean \
-        check-dev-docs
+        check-dev-docs check-free-space prune-target
 
 ## Full CI-equivalent gate — the single entry point. Runs every step in
 ## order and stops at the first failure.
@@ -65,7 +65,7 @@ fmt:
 	cargo fmt
 
 ## Clippy, warnings-as-errors (matches kglite, widened to --workspace).
-clippy:
+clippy: | check-free-space
 	@echo "== [2/6] cargo clippy --workspace --all-targets -- -D warnings =="
 	cargo clippy --workspace --all-targets -- -D warnings
 
@@ -93,13 +93,13 @@ ruff-fix:
 	$(RUFF) format $(PY_PATHS)
 
 ## 3. Build every crate + binary in the workspace.
-build:
+build: | check-free-space
 	@echo "== [3/6] cargo build --workspace =="
 	cargo build --workspace
 
 ## 4. Test the workspace — includes tests/csv_golden.rs (the Rust output-boundary
 ##    oracle: the sodir preprocess FK-joins digest to a frozen golden).
-test:
+test: | check-free-space
 	@echo "== [4/6] cargo test --workspace =="
 	cargo test --workspace
 
@@ -146,7 +146,7 @@ venv:
 	@echo "== venv: $(VENV) provisioned =="
 
 ## Build the Python extension into the local venv.
-develop:
+develop: | check-free-space
 	VIRTUAL_ENV=$(abspath $(VENV)) $(MATURIN) develop
 
 ## Run the offline Python test suite (live-API suites self-skip without their
@@ -157,6 +157,15 @@ pytest:
 ## Remove build artifacts.
 clean:
 	cargo clean
+
+## Refuse compile targets before they can fill the shared build volume.
+check-free-space:
+	@./scripts/check_free_space.sh
+
+## Keep this repository's validated external Cargo cache bounded. This remains
+## usable at critically low free space so it can reclaim the volume.
+prune-target:
+	@./scripts/prune_target.sh
 
 ## Mechanical bound on the gitignored dev-docs/ working folder — the one
 ## accumulation with no reviewer, no CI and no remote watching it grow. Unlike

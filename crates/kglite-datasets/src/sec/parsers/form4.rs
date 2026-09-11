@@ -115,7 +115,7 @@ pub struct InsiderTransaction {
     pub security_title: String,
     pub transaction_date: String,
     /// SEC transaction code (P/S/A/D/M/F/G/J/V/X/...).
-    /// See https://www.sec.gov/about/forms/form4data.pdf for the full list.
+    /// See <https://www.sec.gov/about/forms/form4data.pdf> for the full list.
     pub transaction_code: String,
     pub shares: f64,
     pub price_per_share: f64,

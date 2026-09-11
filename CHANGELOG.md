@@ -28,6 +28,11 @@ semantic versioning (workspace version in the root `Cargo.toml`).
   `Field IN_PLAY` facts remain field-scoped and retain their source URL and
   access date; field affiliation alone never assigns a discovery.
 
+### Changed
+
+- Raised the Python runtime, development, and CI floor from `kglite>=0.17.1`
+  to `kglite>=0.17.3`, keeping both CI matrix legs on the declared range.
+
 ## [0.1.16] - 2026-09-08
 
 ### Changed

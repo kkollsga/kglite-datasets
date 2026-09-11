@@ -7,7 +7,7 @@
 //! construction time; SEC enforces semantic validity at request time.
 //!
 //! `SecClient` is a thin config wrapper over the shared
-//! [`DatasetClient`](crate::http::DatasetClient): it fixes
+//! [`DatasetClient`]: it fixes
 //! SEC's timeouts / rate / retry constants, keeps the UA-validation
 //! rules, and maps [`HttpError`] into [`SecError`].
 

@@ -6,7 +6,7 @@
 //! errors with exponential backoff.
 //!
 //! `ArcGISClient` is a thin config wrapper over the shared
-//! [`DatasetClient`](crate::http::DatasetClient): it fixes
+//! [`DatasetClient`]: it fixes
 //! FactMaps' timeouts / rate / retry constants and maps [`HttpError`]
 //! into [`SodirError`].
 

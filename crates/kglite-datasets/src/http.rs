@@ -26,7 +26,7 @@
 //!
 //! Unlike reqwest, ureq treats **any non-2xx response as an `Err`**
 //! (`ureq::Error::Status(code, resp)`). Callers that branch on 404 / 429 still
-//! need to see the code, so [`DatasetClient::request_once`] unwraps that into a
+//! need to see the code, so `DatasetClient::request_once` unwraps that into a
 //! structured [`HttpError::Status`] carrying the raw status.
 
 use std::io::Read;

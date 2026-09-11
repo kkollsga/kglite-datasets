@@ -6,6 +6,15 @@ generated adapters (identical modulo the `CLAUDE.md` → `AGENTS.md`
 substitution). Edit the authority and regenerate in the same action — never
 edit an adapter alone.
 
+## Doctrine adoption
+
+Follow `../doctrine/learn-from-us.md` → Doctrine sync procedure at planning or
+release entry. Compare numeric semver tuples, merge versioned corrections into
+this declared authority, preserve local improvements, and regenerate adapters.
+An absent marker requires an adoption audit. Planned or deferred work does not
+advance `dev-docs/.doctrine-synced`; advance only through contiguous entries
+whose actions and local sweeps are complete. Snapshotting never performs sync.
+
 Fetch-and-extract dataset loaders for [kglite](../kglite) — wrappers that pull a
 public source (SEC EDGAR, Wikidata, Sodir / Norwegian Offshore Directorate, …)
 and **emit** it to disk (CSV / blueprint JSON / dump), cached under a workdir.
@@ -32,6 +41,14 @@ make gate                    # the full CI-equivalent gate: lint → build → t
 ```
 
 Targets resolve `.venv/bin/…` themselves — no activation needed.
+
+Cargo artifacts live in the repository-specific external cache through the
+repository `target` symlink to
+`/Volumes/EksternalHome/coding-cache/cargo-targets/kglite-datasets`. Do not
+override `CARGO_TARGET_DIR` or share another repository's cache. Run
+`make prune-target` before a release build and after every phased-plan commit;
+it refuses an unexpected symlink, cleans when free space falls below 40 GiB or
+the cache reaches 40 GiB, and refuses builds below 15 GiB free.
 
 `make gate` is the single entry point mirroring kglite's gate discipline
 (`make gate` runs `lint`, workspace build, workspace test, plus the honest
@@ -97,6 +114,17 @@ Each pass through a file should leave it more compartmentalised than you found i
   concerns. Prefer small named strategy fns over long if/else chains.
 - Fixing a bug — scan for the *class* of bug across the other loaders; the
   reported symptom is rarely the only instance.
+- **A comment is a claim.** A change that falsifies a nearby comment corrects
+  it in the same change. When editing commented code, remove restatements and
+  compress repetition while preserving why-not-what, invariants, safety and
+  lifecycle constraints, regression rationale, and parser/extractor bail
+  reasons. Future predictions expire; public doc blocks attach by adjacency,
+  so verify the rendered consumer surface after moving them.
+- **Comments can be load-bearing.** Before deleting one, check the repository's
+  reader inventory in the `clean-comments` skill. PyO3 `///` docs become
+  runtime Python `__doc__`, public Rust docs feed rustdoc/docs.rs, and an
+  in-block comment can suppress clippy's collapsible-if lints. Update the
+  inventory when another tool begins parsing comments.
 
 ## Code review — report what is broken, not what you would have written
 
@@ -212,7 +240,7 @@ hand-edit the inbox.
 
 ## The dev-docs / inbox / skills system
 
-This project runs a gitignored **working folder + cross-project inbox + six
+This project runs a gitignored **working folder + cross-project inbox + local
 skills** that operate them. Two canonical layout maps are the source of truth;
 the skills point at them instead of re-describing the folders (so nothing
 drifts):
@@ -222,7 +250,7 @@ drifts):
 - **`inbox/README.md`** — the cross-project channel map: the `unread/`→`read/`
   lifecycle, the filename schema, the routing rule.
 
-The six skills (`.claude/skills/`):
+The skills (`.claude/skills/`):
 - **`add-todo`** — capture work into `todos.md` + a `plans/` detail doc (the
   single authority on todo-entry shape).
 - **`phased-plan`** — run a large loader/pipeline change as gated phases:
@@ -235,6 +263,8 @@ The six skills (`.claude/skills/`):
 - **`notify`** — send a note to another project's inbox (usually kglite).
 - **`release`** — ship: goal-check, gate, bump, refresh constants, publish,
   tidy.
+- **`clean-comments`** — measure and clean comment residue while preserving
+  public docs, invariants and comment-reader contracts.
 
 **Skill mandates:** demand `phased-plan` for any large feature/refactor (not
 plain plan mode); file backlog via `add-todo`; process the inbox via

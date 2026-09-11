@@ -6,7 +6,7 @@
 //! (only a connect timeout) and streams straight to disk.
 //!
 //! `WikidataClient` is a thin wrapper over the shared
-//! [`DatasetClient`](crate::http::DatasetClient): the
+//! [`DatasetClient`]: the
 //! `DatasetClient` owns agent construction (User-Agent, connect
 //! timeout, the deliberate *no*-read-timeout, rustls TLS, gzip), and
 //! this module borrows that agent for the two request shapes the
