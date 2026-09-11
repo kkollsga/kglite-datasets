@@ -758,7 +758,7 @@ dependencies = [
 
 [[package]]
 name = "kglite-datasets"
-version = "0.1.16"
+version = "0.1.17"
 dependencies = [
  "chrono",
  "csv",
@@ -779,7 +779,7 @@ dependencies = [
 
 [[package]]
 name = "kglite-datasets-py"
-version = "0.1.16"
+version = "0.1.17"
 dependencies = [
  "chrono",
  "kglite-datasets",
