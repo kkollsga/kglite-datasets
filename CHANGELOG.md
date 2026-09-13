@@ -4,6 +4,13 @@ All notable changes to kglite-datasets are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project adheres to
 semantic versioning (workspace version in the root `Cargo.toml`).
 
+## [Unreleased]
+
+### Changed
+
+- Raised the Python runtime, development, and CI floor from `kglite>=0.17.3`
+  to `kglite>=0.17.4`, keeping both CI matrix legs on the declared range.
+
 ## [0.1.17] - 2026-09-11
 
 ### Added
