@@ -6,6 +6,11 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 
 ## [Unreleased]
 
+### Changed
+
+- Raised the Python runtime, development, and CI floor from `kglite>=0.17.4`
+  to `kglite>=0.17.5`, keeping both CI matrix legs on the declared range.
+
 ## [0.1.18] - 2026-09-13
 
 ### Changed

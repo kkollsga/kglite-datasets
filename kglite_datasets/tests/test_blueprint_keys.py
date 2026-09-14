@@ -13,7 +13,7 @@ blueprint is wrong the moment it is written, not the moment it is loaded.
 
 The accepted key sets below mirror ``crates/kglite/src/graph/blueprint/
 schema.rs`` (``ACCEPTED_BLUEPRINT_KEYS`` and friends) in the kglite version at
-the declared floor — 0.17.4. The mirrored additions originally shipped in
+the declared floor — 0.17.5. The mirrored additions originally shipped in
 0.16.23 and were already present at the previous 0.17.1 floor: ``files`` at
 the top level and ``file`` on a node spec and a junction edge. Drift is
 one-directional and safe: a key kglite *adds*
