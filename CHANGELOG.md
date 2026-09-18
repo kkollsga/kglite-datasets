@@ -6,6 +6,17 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 
 ## [Unreleased]
 
+### Changed
+
+- Raised the Python runtime, development, and CI floor from `kglite>=0.17.9`
+  to `kglite>=0.17.10`, keeping both CI matrix legs on the declared range.
+  kglite 0.17.10 is a Cypher executor fix release (a non-aggregating `WITH`
+  now drops the bindings its projection does not carry; `*` expands correctly
+  beside other projection items) with no public API change — the loaders, the
+  emitted artifacts and every golden-graph digest are unaffected.
+- Refreshed the stale `kglite = "0.17.7"` Cargo example in
+  `docs/migration.md` to the current floor.
+
 ## [0.1.21] - 2026-09-18
 
 ### Changed
