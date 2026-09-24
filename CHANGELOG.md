@@ -6,6 +6,25 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 
 ## [Unreleased]
 
+### Changed
+
+- Raised the Python runtime, development, and CI floor from `kglite>=0.17.10`
+  to `kglite>=0.18.0`, keeping both CI matrix legs on the declared range, and
+  refreshed the `docs/migration.md` Cargo example to match. kglite 0.18.0
+  (relationship embeddings, one embedding/text-index vocabulary, several
+  behaviour tightenings) and the 0.17.11/0.17.12 releases it follows change
+  nothing this package calls: `from_blueprint`, `load` and the blueprint key
+  set are unchanged, and every golden-graph digest is identical against the
+  0.18.0 wheel.
+
+### Fixed
+
+- The offline Sodir discovery–play test stamped its fixture index with a fixed
+  date; once that date aged past the 14-day index cooldown, `refresh` re-checked
+  the live Sodir catalogue and overwrote the one-row fixtures with the real
+  datasets, failing the assertion and making the suite network-dependent. The
+  fixture now stamps the current time.
+
 ## [0.1.22] - 2026-09-19
 
 ### Changed
