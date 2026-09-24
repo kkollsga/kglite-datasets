@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import gc
 import json
 from pathlib import Path
@@ -117,7 +118,9 @@ def test_discovery_play_membership_and_existing_joins(tmp_path: Path) -> None:
         "plyNPDID,plyName,plyAge,wkt_geometry\n"
         '900,Synthetic play,Lower-Middle Jurassic,"POLYGON ((1 60, 3 60, 3 62, 1 62, 1 60))"\n'
     )
-    now = "2026-09-08T10:00:00+00:00"
+    # Stamped at run time: a frozen date ages past `index_cooldown_days` and
+    # makes refresh re-check the live catalogue, overwriting these fixtures.
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     entries = {}
     for stem in (
         "discovery",
