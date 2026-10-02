@@ -33,7 +33,9 @@ import pytest
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 
 ACCEPTED_BLUEPRINT_KEYS = frozenset({"settings", "files", "nodes", "compute", "ontology"})
-ACCEPTED_SETTINGS_KEYS = frozenset({"input_root", "root", "output_path", "output_file", "output", "auto_purge", "manifest"})
+ACCEPTED_SETTINGS_KEYS = frozenset(
+    {"input_root", "root", "output_path", "output_file", "output", "auto_purge", "manifest"}
+)
 ACCEPTED_NODE_KEYS = frozenset(
     {
         "csv",
