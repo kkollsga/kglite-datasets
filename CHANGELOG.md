@@ -6,6 +6,17 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 
 ## [Unreleased]
 
+### Changed
+
+- Raised the Python runtime, development, and CI floor from `kglite>=0.18.0`
+  to `kglite>=0.19.1`, keeping both CI matrix legs on the declared range, and
+  refreshed the `docs/migration.md` Cargo example to match. The 0.19.x changes
+  (lossless CSV export, RDF export, `load_rdf` language maps, disk save
+  refusals) touch nothing this package calls: `from_blueprint`, `load` and
+  `load_ntriples` are unchanged, 0.19.0 only adds blueprint keys, and every
+  golden-graph digest is identical against the 0.19.1 wheel. Disk graphs
+  saved by kglite 0.19.1 are not readable by 0.19.0 or older.
+
 ## [0.1.23] - 2026-09-25
 
 ### Changed
