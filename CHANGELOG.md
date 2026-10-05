@@ -6,6 +6,23 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 
 ## [Unreleased]
 
+### Changed
+
+- Raised the Python runtime, development, and CI floor from `kglite>=0.19.1`
+  to `kglite>=0.19.3`, keeping both CI matrix legs on the declared range, and
+  refreshed the `docs/migration.md` Cargo example. The shipped blueprints are
+  unaffected by the 0.19.3 rename of implicit `OF_<PARENT>` edges: every
+  multi-word-parent sub-node already declares its own `OF_<SNAKE_CASE>` edge.
+- The packaged Sodir graph built with kglite 0.19.3 carries one `OF_FIELD` /
+  `OF_DISCOVERY` relationship per production-series node instead of one per
+  monthly CSV row (kglite 0.19.2 fix). On the April 2026 FactMaps snapshot that
+  is 5,664 `OF_FIELD` (was 33,346) and 2,143 `OF_DISCOVERY` (was 2,254); a
+  `count()` over those edges from a series node no longer multiplies by the
+  series length. Every other node and edge count is unchanged.
+- Build warnings from kglite 0.19.3 arrive as one `UserWarning` per group
+  (`declarations`, `stubs`, `data_shape`, `data_quality`), and the full list
+  is in `graph_info()['build']` on the returned graph.
+
 ## [0.1.24] - 2026-10-03
 
 ### Changed

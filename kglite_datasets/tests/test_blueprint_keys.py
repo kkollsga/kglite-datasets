@@ -13,12 +13,15 @@ blueprint is wrong the moment it is written, not the moment it is loaded.
 
 The accepted key sets below mirror ``crates/kglite/src/graph/blueprint/
 schema.rs`` (``ACCEPTED_BLUEPRINT_KEYS`` and friends) in the kglite version at
-the declared floor — 0.19.1 (re-checked 2026-10-03; 0.16.23 added ``files``
-at the top level and ``file`` on a node spec and a junction edge, and 0.19.0
-added ``manifest`` in settings and ``temporal`` on node, FK-edge and junction
-specs; no shipped blueprint uses either). Drift is one-directional and safe: a key kglite *adds* cannot
-make this test wrong until we start using it, at which point the test
-fails loudly and this list gets the new name.
+the declared floor — 0.19.3 (re-checked 2026-10-05 against the ``v0.19.3``
+tag). 0.16.23 added ``files`` at the top level and ``file`` on a node spec and
+a junction edge; 0.19.0 added ``manifest`` in settings and ``temporal`` on
+node, FK-edge and junction specs; 0.19.2/0.19.3 added ``strict``,
+``on_missing_endpoint`` and ``valid_time_default`` in settings,
+``on_missing_endpoint`` on both edge kinds and ``distinct`` on a junction.
+Drift is one-directional and safe: a key kglite *adds* cannot make this test
+wrong until we start using it, at which point the test fails loudly and this
+list gets the new name.
 
 Offline: no network, no graph build.
 """
@@ -34,7 +37,18 @@ PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 
 ACCEPTED_BLUEPRINT_KEYS = frozenset({"settings", "files", "nodes", "compute", "ontology"})
 ACCEPTED_SETTINGS_KEYS = frozenset(
-    {"input_root", "root", "output_path", "output_file", "output", "auto_purge", "manifest"}
+    {
+        "input_root",
+        "root",
+        "output_path",
+        "output_file",
+        "output",
+        "auto_purge",
+        "manifest",
+        "strict",
+        "on_missing_endpoint",
+        "valid_time_default",
+    }
 )
 ACCEPTED_NODE_KEYS = frozenset(
     {
@@ -54,7 +68,9 @@ ACCEPTED_NODE_KEYS = frozenset(
         "temporal",
     }
 )
-ACCEPTED_FK_EDGE_KEYS = frozenset({"target", "fk", "properties", "property_types", "rename", "temporal"})
+ACCEPTED_FK_EDGE_KEYS = frozenset(
+    {"target", "fk", "properties", "property_types", "rename", "temporal", "on_missing_endpoint"}
+)
 ACCEPTED_JUNCTION_EDGE_KEYS = frozenset(
     {
         "csv",
@@ -67,6 +83,8 @@ ACCEPTED_JUNCTION_EDGE_KEYS = frozenset(
         "property_types",
         "rename",
         "temporal",
+        "distinct",
+        "on_missing_endpoint",
     }
 )
 
