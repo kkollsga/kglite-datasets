@@ -6,6 +6,8 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 
 ## [Unreleased]
 
+## [0.1.25] - 2026-10-05
+
 ### Breaking changes and migration
 
 - **Behaviour change:** a query with no `FOR VALID_TIME` prefix on the packaged
