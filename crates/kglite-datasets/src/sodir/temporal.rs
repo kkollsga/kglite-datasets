@@ -293,7 +293,7 @@ fn filter_table(
 }
 
 /// A date as kglite reads a `date` column, or `None`.
-fn parse_date(cell: &str) -> Option<NaiveDate> {
+pub(crate) fn parse_date(cell: &str) -> Option<NaiveDate> {
     let cell = cell.trim();
     if cell.len() >= 10 && cell.as_bytes()[4] == b'-' {
         return NaiveDate::parse_from_str(&cell[..10], "%Y-%m-%d").ok();

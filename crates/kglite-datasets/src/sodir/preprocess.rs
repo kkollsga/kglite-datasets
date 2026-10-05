@@ -27,6 +27,7 @@ pub struct PreprocessReport {
     pub discovery_play: crate::sodir::enhance::EnhancementReport,
     pub discovery_volume: crate::sodir::volume::VolumeReport,
     pub temporal: crate::sodir::temporal::TemporalReport,
+    pub derived: crate::sodir::derived::DerivedReport,
 }
 
 /// Run every applicable FK-derivation step on the CSVs under `csv_dir`.
@@ -49,6 +50,17 @@ pub fn apply_with_temporal(
     enhance_discovery_play: bool,
     temporal_targets: &[&str],
 ) -> Result<PreprocessReport> {
+    apply_with_derived(csv_dir, enhance_discovery_play, temporal_targets, &[])
+}
+
+/// [`apply_with_temporal`], then build each `derived_targets` output (see
+/// [`crate::sodir::derived`]) from the joined and filtered CSVs.
+pub fn apply_with_derived(
+    csv_dir: &Path,
+    enhance_discovery_play: bool,
+    temporal_targets: &[&str],
+    derived_targets: &[&str],
+) -> Result<PreprocessReport> {
     let mut report = PreprocessReport::default();
 
     if csv_dir.join("petreg_licence.csv").is_file() {
@@ -70,6 +82,7 @@ pub fn apply_with_temporal(
         report.discovery_volume = crate::sodir::volume::apply(csv_dir)?;
     }
     report.temporal = crate::sodir::temporal::apply(csv_dir, temporal_targets)?;
+    report.derived = crate::sodir::derived::apply(csv_dir, derived_targets)?;
 
     Ok(report)
 }

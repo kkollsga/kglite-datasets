@@ -16,6 +16,7 @@
 //!   ├── blueprint     blueprint walk + deep-merge                       [A4]
 //!   ├── preprocess    the 4 FK-derivation joins                         [A3]
 //!   ├── temporal      valid-time filtered copies + rejects log
+//!   ├── derived       modelled tables + augmented copies
 //!   ├── index         sodir_index.json + two-tier cooldown              [A3]
 //!   ├── fetch         paginate ArcGIS GeoJSON → CSV                     [A2]
 //!   ├── client        ArcGIS REST client (rate limit + retry)           [A2]
@@ -29,6 +30,7 @@ pub mod ages;
 pub mod blueprint;
 pub mod catalog;
 pub mod client;
+pub mod derived;
 pub mod enhance;
 pub mod error;
 pub mod fetch;
@@ -44,4 +46,4 @@ pub mod volume;
 pub use blueprint::{datasets_used_by_blueprint, merge_blueprint_json};
 pub use error::SodirError;
 pub use layout::Workdir;
-pub use orchestrator::{fetch_all, fetch_all_with_enhancement, FetchAllReport};
+pub use orchestrator::{fetch_all, fetch_all_with_enhancement, source_stems, FetchAllReport};

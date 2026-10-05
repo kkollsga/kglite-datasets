@@ -6,6 +6,32 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 
 ## [Unreleased]
 
+### Breaking changes and migration
+
+- **Behaviour change:** the `Wellbore` node reads
+  `csv/_derived_wellbore.csv`, a copy of `wellbore.csv` the refresh writes
+  with the derived columns below. A complement that overrides
+  `nodes.Wellbore.csv` replaces it and loses them.
+
+### Added
+
+- Well status timeline:
+  `(Wellbore)-[:HAS_STATUS {validFrom, validTo, basis}]->(:WellStatus)`,
+  declared `half_open`. Each dated lifecycle event (permit, predrill, entry,
+  completion, reclass, plugged, P&A) opens a period that lasts until the next
+  one. The current `wlbStatus` closes the timeline with
+  `basis: "inferred-start"` when it differs from the last event, because
+  Sodir gives no date for it. On the October 2026 FactMaps data: 26,270
+  periods on 9,257 wells; 15/9-F-12 reads `DRILLING` in July 2007,
+  `COMPLETED` in 2012 and `P&A` today.
+- `Wellbore.wlbOutcome`: `JUNKED` or `BLOWOUT` (144 wells). These are
+  outcomes, so they never appear as a `WellStatus`.
+- Rust: `kglite_datasets::sodir::derived`, `sodir::source_stems`,
+  `preprocess::apply_with_derived`, and a `derived` field on
+  `PreprocessReport` (struct literals of it break). The refresh report's
+  `preprocess` dict gains `well_status_periods`, `well_status_wells` and
+  `wellbore_outcomes`.
+
 ## [0.1.25] - 2026-10-05
 
 ### Breaking changes and migration

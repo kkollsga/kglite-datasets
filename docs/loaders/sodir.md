@@ -76,6 +76,35 @@ Rules that follow from the source:
 Seismic plan and weekly windows (`seaPlanFromDate`, `seaWeekly…`) are activity
 dates, not validity, and are plain `date` properties.
 
+## Status timelines
+
+`(Wellbore)-[:HAS_STATUS {validFrom, validTo, basis}]->(:WellStatus)` is the
+well's status history, declared `half_open`: `validTo` is the first day the
+status no longer holds.
+
+```python
+g.cypher("MATCH (w:Wellbore {title: '15/9-F-12'})-[:HAS_STATUS]->(s) RETURN s.title")  # P&A
+g.cypher("MATCH (w:Wellbore {title: '15/9-F-12'})-[:HAS_STATUS]->(s) RETURN s.title",
+         valid_at="2007-07-15")                                                     # DRILLING
+```
+
+- Each dated event opens a period that lasts until the next one: permit,
+  predrill entry and completion, entry (`DRILLING`), completion, reclass,
+  plugged, P&A.
+- The reclass date opens the well's `RE-CLASS TO DEV` / `RE-CLASS TO TEST`
+  status, and only for a well that has that status.
+- Sodir publishes the current `wlbStatus` but not the day it took effect.
+  When it differs from the last dated event, it closes the timeline with
+  `basis: "inferred-start"`. It replaces a final `COMPLETED` period (a
+  producing well is producing from completion); otherwise it starts on the
+  last event's date. Every other period has `basis: "reported"`.
+- `JUNKED` and `BLOWOUT` are outcomes, not stages: they are in
+  `Wellbore.wlbOutcome` and never in the timeline.
+- Two events on the same day give an empty period, valid on no day.
+- A well with no dated event has no status.
+- `WellStatus.phase_order` is the lifecycle position (`PERMITTED` = 1 …
+  `WILL NEVER BE DRILLED` = 16); a status outside that list has none.
+
 ## Play assignments
 
 The packaged enhancement assigns every matching `Discovery IN_PLAY`

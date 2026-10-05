@@ -438,7 +438,7 @@
       }
     },
     "Wellbore": {
-      "csv": "csv/wellbore.csv",
+      "csv": "csv/_derived_wellbore.csv",
       "pk": "wlbNpdidWellbore",
       "title": "wlbWellboreName",
       "properties": {
@@ -529,7 +529,8 @@
         "wkt_geometry": "geometry",
         "latitude": "location.lat",
         "longitude": "location.lon",
-        "wlbPressReleaseUrl": "string"
+        "wlbPressReleaseUrl": "string",
+        "wlbOutcome": "string"
       },
       "skipped": [
         "OBJECTID",
@@ -611,6 +612,26 @@
               "lsuBottomDepth",
               "lsuLevel"
             ]
+          },
+          "HAS_STATUS": {
+            "csv": "csv/_derived_wellbore_status_hst.csv",
+            "source_fk": "wlbNpdidWellbore",
+            "target": "WellStatus",
+            "target_fk": "status",
+            "properties": [
+              "validFrom",
+              "validTo",
+              "basis"
+            ],
+            "property_types": {
+              "validFrom": "date",
+              "validTo": "date"
+            },
+            "temporal": {
+              "from": "validFrom",
+              "to": "validTo",
+              "convention": "half_open"
+            }
           }
         }
       },
@@ -991,6 +1012,14 @@
             }
           }
         }
+      }
+    },
+    "WellStatus": {
+      "csv": "csv/_derived_well_status.csv",
+      "pk": "name",
+      "title": "name",
+      "properties": {
+        "phase_order": "int"
       }
     },
     "Discovery": {
