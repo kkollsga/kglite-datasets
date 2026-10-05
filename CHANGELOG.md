@@ -14,6 +14,10 @@ semantic versioning (workspace version in the root `Cargo.toml`).
   2,333 `FieldReserves` on the October 2026 data. **Do:** pass
   `valid_at="all"` (or prefix `FOR VALID_TIME ALL`) for every version, or
   `valid_at="2015-06-30"` for the version in force on a date.
+- The monthly `ProductionProfile` and `DiscoveryProduction` series lose the
+  `investments` channel: Sodir publishes investments on yearly rows only, so
+  it was zero on every monthly row. **Do:** read `investments` from the new
+  `ProductionProfileAnnual` / `DiscoveryProductionAnnual` siblings.
 - **Behaviour change:** the `Wellbore` node reads
   `csv/_derived_wellbore.csv`, a copy of `wellbore.csv` the refresh writes
   with the derived columns below. A complement that overrides
@@ -54,6 +58,13 @@ semantic versioning (workspace version in the root `Cargo.toml`).
   no day (2 rows). Sodir publishes `DiscoveryReserves` and
   `FieldReservesCompany` for the latest date only, so they have no earlier
   version.
+- Yearly production series: `ProductionProfileAnnual` (under `Field`) and
+  `DiscoveryProductionAnnual` (under `Discovery`) load Sodir's yearly rows,
+  which the monthly series dropped as `prfMonth = 0` aggregates. They carry
+  the production channels plus `investments` (MillNOK). On the October 2026
+  data: 3,649 field years and 223 discovery years; Ekofisk's investments sum
+  to 167,610 MNOK. The monthly series filter on `prfPeriod = "month"`, so the
+  build no longer warns about dropped aggregate rows.
 - Status timelines ignore an event dated before 1960: Sodir writes
   1900-01-01 (two facility shutdowns) for an unknown date.
 - Rust: `kglite_datasets::sodir::derived`, `sodir::source_stems`,

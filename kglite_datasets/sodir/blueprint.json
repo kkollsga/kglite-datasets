@@ -335,7 +335,8 @@
           "title": "prfInformationCarrier",
           "parent_fk": "prfNpdidInformationCarrier",
           "filter": {
-            "prfInformationCarrierKind": "FIELD"
+            "prfInformationCarrierKind": "FIELD",
+            "prfPeriod": "month"
           },
           "properties": {},
           "skipped": [
@@ -347,6 +348,59 @@
               "month": "prfMonth"
             },
             "resolution": "month",
+            "channels": {
+              "prd_oil_net": "prfPrdOilNetMillSm3",
+              "prd_oil_gross": "prfPrdOilGrossMillSm3",
+              "prd_gas_net": "prfPrdGasNetBillSm3",
+              "prd_gas_gross": "prfPrdGasGrossBillSm3",
+              "prd_ngl_net": "prfPrdNGLNetMillSm3",
+              "prd_condensate_net": "prfPrdCondensateNetMillSm3",
+              "prd_condensate_gross": "prfPrdCondensateGrossMillSm3",
+              "prd_oe_net": "prfPrdOeNetMillSm3",
+              "prd_oe_gross": "prfPrdOeGrossMillSm3",
+              "prd_water": "prfPrdProducedWaterInFieldMillS"
+            },
+            "units": {
+              "prd_oil_net": "MillSm3",
+              "prd_oil_gross": "MillSm3",
+              "prd_gas_net": "BillSm3",
+              "prd_gas_gross": "BillSm3",
+              "prd_ngl_net": "MillSm3",
+              "prd_condensate_net": "MillSm3",
+              "prd_condensate_gross": "MillSm3",
+              "prd_oe_net": "MillSm3",
+              "prd_oe_gross": "MillSm3",
+              "prd_water": "MillSm3"
+            }
+          },
+          "connections": {
+            "fk_edges": {
+              "OF_FIELD": {
+                "target": "Field",
+                "fk": "prfNpdidInformationCarrier"
+              }
+            }
+          }
+        },
+        "ProductionProfileAnnual": {
+          "csv": "csv/profiles.csv",
+          "pk": "prfNpdidInformationCarrier",
+          "title": "prfInformationCarrier",
+          "parent_fk": "prfNpdidInformationCarrier",
+          "filter": {
+            "prfInformationCarrierKind": "FIELD",
+            "prfPeriod": "year"
+          },
+          "properties": {},
+          "skipped": [
+            "OBJECTID",
+            "prfMonth"
+          ],
+          "timeseries": {
+            "time_key": {
+              "year": "prfYear"
+            },
+            "resolution": "year",
             "channels": {
               "prd_oil_net": "prfPrdOilNetMillSm3",
               "prd_oil_gross": "prfPrdOilGrossMillSm3",
@@ -1351,7 +1405,8 @@
           "title": "prfInformationCarrier",
           "parent_fk": "prfNpdidInformationCarrier",
           "filter": {
-            "prfInformationCarrierKind": "DISCOVERY"
+            "prfInformationCarrierKind": "DISCOVERY",
+            "prfPeriod": "month"
           },
           "properties": {},
           "skipped": [
@@ -1363,6 +1418,59 @@
               "month": "prfMonth"
             },
             "resolution": "month",
+            "channels": {
+              "prd_oil_net": "prfPrdOilNetMillSm3",
+              "prd_oil_gross": "prfPrdOilGrossMillSm3",
+              "prd_gas_net": "prfPrdGasNetBillSm3",
+              "prd_gas_gross": "prfPrdGasGrossBillSm3",
+              "prd_ngl_net": "prfPrdNGLNetMillSm3",
+              "prd_condensate_net": "prfPrdCondensateNetMillSm3",
+              "prd_condensate_gross": "prfPrdCondensateGrossMillSm3",
+              "prd_oe_net": "prfPrdOeNetMillSm3",
+              "prd_oe_gross": "prfPrdOeGrossMillSm3",
+              "prd_water": "prfPrdProducedWaterInFieldMillS"
+            },
+            "units": {
+              "prd_oil_net": "MillSm3",
+              "prd_oil_gross": "MillSm3",
+              "prd_gas_net": "BillSm3",
+              "prd_gas_gross": "BillSm3",
+              "prd_ngl_net": "MillSm3",
+              "prd_condensate_net": "MillSm3",
+              "prd_condensate_gross": "MillSm3",
+              "prd_oe_net": "MillSm3",
+              "prd_oe_gross": "MillSm3",
+              "prd_water": "MillSm3"
+            }
+          },
+          "connections": {
+            "fk_edges": {
+              "OF_DISCOVERY": {
+                "target": "Discovery",
+                "fk": "prfNpdidInformationCarrier"
+              }
+            }
+          }
+        },
+        "DiscoveryProductionAnnual": {
+          "csv": "csv/profiles.csv",
+          "pk": "prfNpdidInformationCarrier",
+          "title": "prfInformationCarrier",
+          "parent_fk": "prfNpdidInformationCarrier",
+          "filter": {
+            "prfInformationCarrierKind": "DISCOVERY",
+            "prfPeriod": "year"
+          },
+          "properties": {},
+          "skipped": [
+            "OBJECTID",
+            "prfMonth"
+          ],
+          "timeseries": {
+            "time_key": {
+              "year": "prfYear"
+            },
+            "resolution": "year",
             "channels": {
               "prd_oil_net": "prfPrdOilNetMillSm3",
               "prd_oil_gross": "prfPrdOilGrossMillSm3",

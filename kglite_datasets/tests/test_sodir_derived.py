@@ -269,3 +269,53 @@ def test_company_and_discovery_reserves_chain_per_version(tmp_path: Path) -> Non
     assert _rows(graph, discovery, params={"d": "D7"}) == [{"rc": "4F"}, {"rc": "5F"}]
     assert _rows(graph, discovery, params={"d": "D8"}, valid_at="2011-06-30") == [{"rc": "7F"}]
     assert _rows(graph, discovery, params={"d": "D8"}) == [{"rc": "5F"}]
+
+
+# ── yearly production profiles ──────────────────────────────────────────
+
+PROFILES = (
+    "prfPeriod,prfYear,prfMonth,prfInformationCarrier,prfInformationCarrierKind,prfNpdidInformationCarrier,"
+    "prfPrdOilNetMillSm3,prfPrdOeNetMillSm3,prfInvestmentsMillNOK\n"
+    "year,2000,0,EKOFISK,FIELD,1,0.0,0.0,356.0\n"
+    "year,2001,0,EKOFISK,FIELD,1,0.5,0.6,990.0\n"
+    "month,2001,1,EKOFISK,FIELD,1,0.2,0.25,0.0\n"
+    "month,2001,2,EKOFISK,FIELD,1,0.3,0.35,0.0\n"
+    "year,2001,0,D7,DISCOVERY,7,0.1,0.1,12.0\n"
+    "month,2001,1,D7,DISCOVERY,7,0.1,0.1,0.0\n"
+)
+
+
+def test_yearly_profiles_carry_investments(tmp_path: Path) -> None:
+    nodes = {
+        "Field": _spec("Field", sub_nodes=("ProductionProfile", "ProductionProfileAnnual")),
+        "Discovery": _spec("Discovery", sub_nodes=("DiscoveryProduction", "DiscoveryProductionAnnual")),
+    }
+    csvs = {"field": FIELDS, "discovery": DISCOVERIES, "profiles": PROFILES}
+    _, graph = _build(tmp_path, csvs, nodes)
+    annual = _rows(
+        graph,
+        "MATCH (:Field {title: 'EKOFISK'})<-[:OF_FIELD]-(a:ProductionProfileAnnual) "
+        "RETURN ts_sum(a.investments) AS inv, ts_sum(a.prd_oe_net) AS oe, ts_count(a.investments) AS n",
+    )
+    assert annual == [{"inv": 1346.0, "oe": 0.6, "n": 2}]
+    monthly = _rows(
+        graph,
+        "MATCH (:Field {title: 'EKOFISK'})<-[:OF_FIELD]-(p:ProductionProfile) "
+        "RETURN ts_sum(p.prd_oe_net) AS oe, ts_count(p.prd_oe_net) AS n",
+    )
+    assert monthly == [{"oe": 0.6, "n": 2}]
+    dsc = _rows(
+        graph,
+        "MATCH (:Discovery {title: 'D7'})<-[:OF_DISCOVERY]-(a:DiscoveryProductionAnnual) "
+        "RETURN ts_sum(a.investments) AS inv",
+    )
+    assert dsc == [{"inv": 12.0}]
+    # The yearly rows are loaded, not dropped as monthly aggregates.
+    assert "prfMonth=0" not in json.dumps(graph.graph_info()["build"])
+
+
+def test_monthly_profiles_have_no_investments_channel() -> None:
+    for owner, sub in (("Field", "ProductionProfile"), ("Discovery", "DiscoveryProduction")):
+        series = PACKAGED["nodes"][owner]["sub_nodes"][sub]["timeseries"]
+        assert "investments" not in series["channels"], sub
+        assert "investments" in PACKAGED["nodes"][owner]["sub_nodes"][sub + "Annual"]["timeseries"]["channels"]

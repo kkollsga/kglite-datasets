@@ -95,6 +95,22 @@ g.cypher("MATCH (f:Field {title: 'EKOFISK'})<-[:OF_FIELD]-(r:FieldReserves) "
 - Sodir publishes `DiscoveryReserves` and `FieldReservesCompany` for the
   latest date only, so an as-of date before it finds none.
 
+## Production series
+
+| Sub-node | Parent | Resolution | Channels |
+|---|---|---|---|
+| `ProductionProfile` | `Field` | month | production (`prd_oil_net`, `prd_oe_net`, …), `prd_water` |
+| `ProductionProfileAnnual` | `Field` | year | the same, plus `investments` (MillNOK) |
+| `DiscoveryProduction` | `Discovery` | month | production |
+| `DiscoveryProductionAnnual` | `Discovery` | year | production plus `investments` |
+
+Sodir publishes investments on yearly rows only.
+
+```python
+g.cypher("MATCH (:Field {title: 'EKOFISK'})<-[:OF_FIELD]-(a:ProductionProfileAnnual) "
+         "RETURN ts_sum(a.investments)")
+```
+
 ## Status timelines
 
 `(Wellbore)-[:HAS_STATUS {validFrom, validTo, basis}]->(:WellStatus)` is the
