@@ -11,6 +11,7 @@
 //! Dates are written as `YYYY-MM-DD`. Half-open windows (`validTo`,
 //! `existsTo`) name the first day the row is no longer valid.
 
+mod enrich;
 mod reserves;
 mod status;
 
@@ -87,6 +88,31 @@ const OUTPUTS: &[Derived] = &[
         stem: "_derived_field_reserves_company",
         sources: &["field_reserves_company"],
         build: reserves::field_reserves_company,
+    },
+    Derived {
+        stem: "_derived_structural_elements",
+        sources: &["structural_elements"],
+        build: enrich::structural_elements_table,
+    },
+    Derived {
+        stem: "_derived_structural_encloses",
+        sources: &["structural_elements", "wellbore", "discovery"],
+        build: enrich::structural_encloses,
+    },
+    Derived {
+        stem: "_derived_play_encloses",
+        sources: &["play", "structural_elements"],
+        build: enrich::play_encloses,
+    },
+    Derived {
+        stem: "_derived_hc_in_formation",
+        sources: &["discovery", "wellbore", "strat_litho"],
+        build: enrich::hc_in_formation,
+    },
+    Derived {
+        stem: "_derived_play_has_formation",
+        sources: &["discovery", "wellbore", "strat_litho"],
+        build: enrich::play_has_formation,
     },
 ];
 

@@ -179,6 +179,25 @@ Deduplicate discoveries within each play before aggregating volumes. A
 discovery may legitimately belong to several plays, so totals from different
 plays overlap and must not be summed into an estate-wide total.
 
+## Formations and containment
+
+| Relationship | From → to | How |
+|---|---|---|
+| `HC_IN_FORMATION {hc_rank}` | Discovery → Stratigraphy | The formations with hydrocarbons in the discovery's discovery wellbore (`wlbFormationWithHc1..3` = rank 1..3). A name resolves by exact match, else with Sodir's ` FM` suffix. |
+| `PLAY_HAS_FORMATION {discovery_count}` | Play → Stratigraphy | The HC formations of the play's `IN_PLAY` discoveries, from the HC slots whose age matched the play (a published example contributes every slot). `discovery_count` counts distinct discoveries. |
+| `ENCLOSES` | StructuralElement → Wellbore | The element contains the well's point. |
+| `ENCLOSES` | StructuralElement → Discovery | The element contains the whole discovery polygon. |
+| `ENCLOSES` | Play → StructuralElement | The play contains the whole element polygon. |
+
+Sodir's structural-element layer repeats ids:
+
+- Rows with one id and one `KODE` are parts of one element. They merge into
+  one node with a MULTIPOLYGON.
+- An id shared by different elements stays with the highest-level one
+  (lowest `LEVEL`). The others get a new negative id, as does every element
+  published under id 0.
+- `STRUCTID_SOURCE` keeps the published id.
+
 ## Discovery volumes
 
 `DiscoveryVolume` emits exactly one row for every discovery. For discoveries

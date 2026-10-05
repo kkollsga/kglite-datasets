@@ -530,7 +530,7 @@ fn load_plays(path: &Path) -> Result<Vec<Play>> {
     Ok(out)
 }
 
-fn parse_geometry(value: &str) -> Option<Geometry<f64>> {
+pub(crate) fn parse_geometry(value: &str) -> Option<Geometry<f64>> {
     Geometry::try_from(Wkt::<f64>::from_str(value).ok()?).ok()
 }
 

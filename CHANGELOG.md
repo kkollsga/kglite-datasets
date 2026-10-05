@@ -18,10 +18,16 @@ semantic versioning (workspace version in the root `Cargo.toml`).
   `investments` channel: Sodir publishes investments on yearly rows only, so
   it was zero on every monthly row. **Do:** read `investments` from the new
   `ProductionProfileAnnual` / `DiscoveryProductionAnnual` siblings.
-- **Behaviour change:** the `Wellbore` node reads
-  `csv/_derived_wellbore.csv`, a copy of `wellbore.csv` the refresh writes
-  with the derived columns below. A complement that overrides
-  `nodes.Wellbore.csv` replaces it and loses them.
+- **Behaviour change:** `StructuralElement` ids are unique. Sodir's layer
+  repeats 10 ids over 23 rows. Parts of one element (same `KODE`, 8 ids)
+  merge into one node with a MULTIPOLYGON. Different elements under one id
+  get a new negative id: Mjølnir Impact Crater (published under 24, which
+  Bjarmeland Platform keeps) and the three Barents Sea elements published
+  under 0. `STRUCTID_SOURCE` keeps the published id. 253 nodes (was 263 rows).
+- **Behaviour change:** the `Wellbore` and `StructuralElement` nodes read
+  copies the refresh writes (`csv/_derived_wellbore.csv`,
+  `csv/_derived_structural_elements.csv`). A complement that overrides their
+  `csv` replaces the copy and loses the derived columns.
 
 ### Added
 
@@ -65,6 +71,17 @@ semantic versioning (workspace version in the root `Cargo.toml`).
   data: 3,649 field years and 223 discovery years; Ekofisk's investments sum
   to 167,610 MNOK. The monthly series filter on `prfPeriod = "month"`, so the
   build no longer warns about dropped aggregate rows.
+- `HC_IN_FORMATION {hc_rank}` (Discovery → Stratigraphy): the formations
+  with hydrocarbons in the discovery's discovery wellbore, ranked by HC slot.
+  A wellbore's `TARBERT` resolves to Sodir's `TARBERT FM`. 866 links on 584
+  discoveries.
+- `PLAY_HAS_FORMATION {discovery_count}` (Play → Stratigraphy): the HC
+  formations of the play's discoveries (`Discovery IN_PLAY`), from the HC
+  slots whose age matched the play. 199 links on 57 plays.
+- `ENCLOSES`, by spatial containment as kglite's `contains()` decides:
+  `StructuralElement` → `Wellbore` (the well's point, 9,738),
+  `StructuralElement` → `Discovery` (the whole discovery polygon, 430) and
+  `Play` → `StructuralElement` (the whole element, 106).
 - Status timelines ignore an event dated before 1960: Sodir writes
   1900-01-01 (two facility shutdowns) for an unknown date.
 - Rust: `kglite_datasets::sodir::derived`, `sodir::source_stems`,

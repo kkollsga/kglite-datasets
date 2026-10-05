@@ -319,3 +319,122 @@ def test_monthly_profiles_have_no_investments_channel() -> None:
         series = PACKAGED["nodes"][owner]["sub_nodes"][sub]["timeseries"]
         assert "investments" not in series["channels"], sub
         assert "investments" in PACKAGED["nodes"][owner]["sub_nodes"][sub + "Annual"]["timeseries"]["channels"]
+
+
+# ── enrichment: formations and spatial containment ──────────────────────
+
+
+def _square(x0: float, y0: float, size: float) -> str:
+    x1, y1 = x0 + size, y0 + size
+    return f'"POLYGON(({x0} {y0}, {x1} {y0}, {x1} {y1}, {x0} {y1}, {x0} {y0}))"'
+
+
+STRUCTURAL = (
+    "STRUCTID,KODE,LEVEL,NAME,wkt_geometry\n"
+    # One element published in two parts under one id: merged.
+    f"122,MOTO,3,Møre-Trøndelag Fault Complex,{_square(0, 0, 2)}\n"
+    f"122,MOTO,3,Møre-Trøndelag Fault Complex,{_square(10, 0, 2)}\n"
+    # Two different elements under one id: the platform keeps it.
+    f"24,BJAR,2,Bjarmeland Platform,{_square(20, 0, 2)}\n"
+    f"24,MJOL,3,Mjølnir Impact Crater,{_square(30, 0, 2)}\n"
+    # 0 is no id: every element under it gets a new one.
+    f"0,THOR,3,Thor Iversen Fault Complex,{_square(40, 0, 2)}\n"
+    f"0,VKAR,3,Veslekari Dome,{_square(50, 0, 2)}\n"
+)
+ENRICH_WELLBORES = (
+    "wlbNpdidWellbore,wlbWellboreName,wlbFormationWithHc1,wlbFormationWithHc2,wlbFormationWithHc3,wkt_geometry\n"
+    '1,W-IN-PART-2,BRENT GP,TARBERT,,"POINT(11 1)"\n'
+    '2,W-IN-CRATER,ULA,,,"POINT(31 1)"\n'
+    '3,W-OUTSIDE,,,,"POINT(100 1)"\n'
+)
+ENRICH_DISCOVERIES = (
+    "dscNpdidDiscovery,dscName,wlbNpdidWellbore,wlbName,wkt_geometry\n"
+    f"7,D-INSIDE,1,W-IN-PART-2,{_square(10.5, 0.5, 0.5)}\n"
+    # Straddles the element boundary: not enclosed.
+    f"8,D-ACROSS,2,W-IN-CRATER,{_square(31.5, 0.5, 1.0)}\n"
+)
+STRAT_LITHO = (
+    "lsuNpdidLithoStrat,lsuName,lsuLevel\n500,BRENT GP,GROUP\n501,TARBERT FM,FORMATION\n502,ULA FM,FORMATION\n"
+)
+PLAYS = f"plyNPDID,plyName,plyAge,wkt_geometry\n900,PLAY-A,Middle Jurassic,{_square(-1, -1, 15)}\n"
+DISCOVERY_PLAY = (
+    "dscNpdidDiscovery,plyNPDID,matched_hc_slots\n"
+    # Only HC slot 1 matched the play's age.
+    '7,900,"[1]"\n'
+)
+
+
+def _enriched(tmp_path: Path):
+    nodes = {
+        "StructuralElement": _spec("StructuralElement", junctions=("ENCLOSES",)),
+        "Wellbore": _spec("Wellbore"),
+        "Discovery": _spec("Discovery", junctions=("HC_IN_FORMATION", "IN_PLAY")),
+        "Stratigraphy": _spec("Stratigraphy"),
+        "Play": _spec("Play", junctions=("ENCLOSES", "PLAY_HAS_FORMATION")),
+    }
+    csvs = {
+        "structural_elements": STRUCTURAL,
+        "wellbore": ENRICH_WELLBORES,
+        "discovery": ENRICH_DISCOVERIES,
+        "strat_litho": STRAT_LITHO,
+        "play": PLAYS,
+    }
+    # The discovery-play links come from the packaged enhancement; this
+    # workdir supplies them directly.
+    (tmp_path / "csv").mkdir()
+    (tmp_path / "csv" / "_derived_discovery_play.csv").write_text(DISCOVERY_PLAY)
+    return _build(tmp_path, csvs, nodes)
+
+
+def test_structural_element_ids_are_unique(tmp_path: Path) -> None:
+    report, graph = _enriched(tmp_path)
+    rows = _rows(
+        graph,
+        "MATCH (s:StructuralElement) RETURN s.id AS id, s.KODE AS k, s.STRUCTID_SOURCE AS src ORDER BY k",
+    )
+    assert rows == [
+        {"id": 24, "k": "BJAR", "src": 24},
+        {"id": -3, "k": "MJOL", "src": 24},
+        {"id": 122, "k": "MOTO", "src": 122},
+        {"id": -1, "k": "THOR", "src": 0},
+        {"id": -2, "k": "VKAR", "src": 0},
+    ]
+    pre = report["preprocess"]
+    assert (pre["structural_elements_parts_merged"], pre["structural_elements_ids_reassigned"]) == (1, 3)
+
+
+def test_encloses_by_spatial_containment(tmp_path: Path) -> None:
+    _, graph = _enriched(tmp_path)
+    enclosed = _rows(
+        graph,
+        "MATCH (s:StructuralElement)-[:ENCLOSES]->(x) "
+        "RETURN s.KODE AS s, labels(x)[0] AS t, x.title AS x ORDER BY s, x",
+    )
+    assert enclosed == [
+        {"s": "MJOL", "t": "Wellbore", "x": "W-IN-CRATER"},
+        # The second part of the merged element holds both.
+        {"s": "MOTO", "t": "Discovery", "x": "D-INSIDE"},
+        {"s": "MOTO", "t": "Wellbore", "x": "W-IN-PART-2"},
+    ]
+    plays = _rows(graph, "MATCH (p:Play)-[:ENCLOSES]->(s:StructuralElement) RETURN s.KODE AS s")
+    assert plays == [{"s": "MOTO"}]
+
+
+def test_formation_links_follow_hc_formations(tmp_path: Path) -> None:
+    _, graph = _enriched(tmp_path)
+    hc = _rows(
+        graph,
+        "MATCH (d:Discovery)-[r:HC_IN_FORMATION]->(s:Stratigraphy) "
+        "RETURN d.title AS d, s.title AS s, r.hc_rank AS rank ORDER BY d, rank",
+    )
+    # 'TARBERT' and 'ULA' name formations Sodir lists as 'TARBERT FM' / 'ULA FM'.
+    assert hc == [
+        {"d": "D-ACROSS", "s": "ULA FM", "rank": 1},
+        {"d": "D-INSIDE", "s": "BRENT GP", "rank": 1},
+        {"d": "D-INSIDE", "s": "TARBERT FM", "rank": 2},
+    ]
+    play = _rows(
+        graph,
+        "MATCH (p:Play)-[r:PLAY_HAS_FORMATION]->(s:Stratigraphy) RETURN s.title AS s, r.discovery_count AS n",
+    )
+    assert play == [{"s": "BRENT GP", "n": 1}]

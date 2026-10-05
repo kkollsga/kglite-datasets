@@ -1234,6 +1234,18 @@
               "wellbore_ages": "list",
               "play_ages": "list"
             }
+          },
+          "HC_IN_FORMATION": {
+            "csv": "csv/_derived_hc_in_formation.csv",
+            "source_fk": "dscNpdidDiscovery",
+            "target": "Stratigraphy",
+            "target_fk": "lsuNpdidLithoStrat",
+            "properties": [
+              "hc_rank"
+            ],
+            "property_types": {
+              "hc_rank": "int"
+            }
           }
         }
       },
@@ -2186,7 +2198,27 @@
         "_geometry"
       ],
       "connections": {
-        "fk_edges": {}
+        "fk_edges": {},
+        "junction_edges": {
+          "ENCLOSES": {
+            "csv": "csv/_derived_play_encloses.csv",
+            "source_fk": "plyNPDID",
+            "target": "StructuralElement",
+            "target_fk": "STRUCTID"
+          },
+          "PLAY_HAS_FORMATION": {
+            "csv": "csv/_derived_play_has_formation.csv",
+            "source_fk": "plyNPDID",
+            "target": "Stratigraphy",
+            "target_fk": "lsuNpdidLithoStrat",
+            "properties": [
+              "discovery_count"
+            ],
+            "property_types": {
+              "discovery_count": "int"
+            }
+          }
+        }
       },
       "sub_nodes": {}
     },
@@ -2795,7 +2827,7 @@
       }
     },
     "StructuralElement": {
-      "csv": "csv/structural_elements.csv",
+      "csv": "csv/_derived_structural_elements.csv",
       "pk": "STRUCTID",
       "title": "NAME",
       "properties": {
@@ -2817,7 +2849,8 @@
         "TOPOGRAPHY": "string",
         "wkt_geometry": "geometry",
         "latitude": "location.lat",
-        "longitude": "location.lon"
+        "longitude": "location.lon",
+        "STRUCTID_SOURCE": "int"
       },
       "skipped": [
         "OBJECTID",
@@ -2827,7 +2860,20 @@
         "created_date",
         "last_edited_date"
       ],
-      "connections": {}
+      "connections": {
+        "junction_edges": {
+          "ENCLOSES": {
+            "csv": "csv/_derived_structural_encloses.csv",
+            "source_fk": "STRUCTID",
+            "target": [
+              "Wellbore",
+              "Discovery"
+            ],
+            "target_type_column": "target_type",
+            "target_fk": "target_id"
+          }
+        }
+      }
     },
     "AfexArea": {
       "csv": "csv/_derived_temporal_afex_area.csv",
