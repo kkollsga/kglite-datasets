@@ -6,6 +6,8 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 
 ## [Unreleased]
 
+## [0.1.26] - 2026-10-05
+
 ### Breaking changes and migration
 
 - **Behaviour change:** `FieldReserves`, `DiscoveryReserves` and
@@ -34,8 +36,8 @@ semantic versioning (workspace version in the root `Cargo.toml`).
   skipped.
 - **Behaviour change:** the `Wellbore`, `Field`, `Discovery`, `Licence`,
   `LicenceTask`, `Block`, `SeismicSurvey` and `StructuralElement` nodes read
-  copies the refresh writes (`csv/_derived_<stem>.csv`). A complement that overrides their
-  `csv` replaces the copy and loses the derived columns.
+  copies the refresh writes (`csv/_derived_<stem>.csv`). A complement that
+  overrides their `csv` replaces the copy and loses the derived columns.
 
 ### Added
 
@@ -122,9 +124,9 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 - Rust: `kglite_datasets::sodir::derived`, `sodir::source_stem`,
   `preprocess::apply_with_derived`, and a `derived` field on
   `PreprocessReport` (struct literals of it break). The refresh report's
-  `preprocess` dict gains a count per derived table (`well_status_periods`,
-  `facility_status_periods`, `hc_in_formation`, `structural_elements_ids_reassigned`,
-  …). A derived table fetches only its own source; other tables it reads are
+  `preprocess` dict gains a count per derived table
+  (`well_status_periods`, `facility_status_periods`, `hc_in_formation`,
+  `structural_elements_ids_reassigned`, …). A derived table fetches only its own source; other tables it reads are
   used when cached.
 
 ### Fixed
