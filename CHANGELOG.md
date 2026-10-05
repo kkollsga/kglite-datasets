@@ -24,9 +24,9 @@ semantic versioning (workspace version in the root `Cargo.toml`).
   get a new negative id: Mjølnir Impact Crater (published under 24, which
   Bjarmeland Platform keeps) and the three Barents Sea elements published
   under 0. `STRUCTID_SOURCE` keeps the published id. 253 nodes (was 263 rows).
-- **Behaviour change:** the `Wellbore` and `StructuralElement` nodes read
-  copies the refresh writes (`csv/_derived_wellbore.csv`,
-  `csv/_derived_structural_elements.csv`). A complement that overrides their
+- **Behaviour change:** the `Wellbore`, `Field` and `StructuralElement`
+  nodes read copies the refresh writes (`csv/_derived_wellbore.csv`,
+  `csv/_derived_field.csv`, `csv/_derived_structural_elements.csv`). A complement that overrides their
   `csv` replaces the copy and loses the derived columns.
 
 ### Added
@@ -82,9 +82,20 @@ semantic versioning (workspace version in the root `Cargo.toml`).
   `StructuralElement` → `Wellbore` (the well's point, 9,738),
   `StructuralElement` → `Discovery` (the whole discovery polygon, 430) and
   `Play` → `StructuralElement` (the whole element, 106).
+- `Field` carries its latest `FieldReserves` version under the same names
+  (`fldRecoverableOil` … `fldRecoverableOE`, `fldRemaining…`,
+  `fldInplace…`) plus `fldReservesDate` and `fldReservesVersion` (142 of
+  144 fields), and `fldProducedOE`, its summed monthly net oil-equivalent
+  production in MillSm3 (129 fields; Ekofisk 689.1).
+- `DiscoveryVolume` carries the discovery's own latest `DiscoveryReserves`
+  estimate as `latest_estimate_date`, `latest_resource_class` and
+  `latest_recoverable_oil` … `latest_recoverable_oe`, whether or not the
+  non-duplicating `recoverable_*` projection uses it (95 discoveries; 14 of
+  them have no projected volume). The enhancement version is 15, so a cached
+  disk graph rebuilds.
 - Status timelines ignore an event dated before 1960: Sodir writes
   1900-01-01 (two facility shutdowns) for an unknown date.
-- Rust: `kglite_datasets::sodir::derived`, `sodir::source_stems`,
+- Rust: `kglite_datasets::sodir::derived`, `sodir::source_stem`,
   `preprocess::apply_with_derived`, and a `derived` field on
   `PreprocessReport` (struct literals of it break). The refresh report's
   `preprocess` dict gains `well_status_periods`, `well_status_wells` and

@@ -311,17 +311,13 @@ pub fn fetch_all_with_enhancement(
     })
 }
 
-/// The source stems a blueprint stem is built from: a valid-time copy
-/// (`_derived_temporal_<stem>`) gives its source, a derived output gives the
-/// sources it reads, any other stem gives itself.
-pub fn source_stems(stem: &str) -> Vec<String> {
-    if let Some(source) = temporal::source_for_derived(stem) {
-        return vec![source.to_string()];
-    }
-    if let Some(sources) = derived::sources_for(stem) {
-        return sources.iter().map(|s| s.to_string()).collect();
-    }
-    vec![stem.to_string()]
+/// The stem to fetch for a blueprint stem: a valid-time copy
+/// (`_derived_temporal_<stem>`) or a derived output gives its source, any
+/// other stem gives itself.
+pub fn source_stem(stem: &str) -> &str {
+    temporal::source_for_derived(stem)
+        .or_else(|| derived::source_for(stem))
+        .unwrap_or(stem)
 }
 
 /// A blueprint's stems split into what to fetch and what to build locally.
@@ -335,7 +331,7 @@ struct Needed {
 fn split_needed(needed: &[String]) -> Needed {
     let mut out = Needed::default();
     for stem in needed {
-        out.fetch.extend(source_stems(stem));
+        out.fetch.push(source_stem(stem).to_string());
         if let Some(source) = temporal::source_for_derived(stem) {
             out.temporal.push(source);
         } else if let Some(known) = derived::known(stem) {

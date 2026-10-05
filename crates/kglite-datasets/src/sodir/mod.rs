@@ -46,4 +46,4 @@ pub mod volume;
 pub use blueprint::{datasets_used_by_blueprint, merge_blueprint_json};
 pub use error::SodirError;
 pub use layout::Workdir;
-pub use orchestrator::{fetch_all, fetch_all_with_enhancement, source_stems, FetchAllReport};
+pub use orchestrator::{fetch_all, fetch_all_with_enhancement, source_stem, FetchAllReport};

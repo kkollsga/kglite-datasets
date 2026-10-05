@@ -55,7 +55,8 @@ def _build(tmp_path: Path, csvs: dict[str, str], nodes: dict[str, dict]):
         concurrency=1,
         enhance_discovery_play=False,
     )
-    assert not report["unfetchable"], report["unfetchable"]
+    # Network-free: every table the refresh wants is supplied here.
+    assert not report["unfetchable"] and not report["fetched"], report
     return report, _build_graph(tmp_path, blueprint, "memory", None, False)
 
 
@@ -438,3 +439,22 @@ def test_formation_links_follow_hc_formations(tmp_path: Path) -> None:
         "MATCH (p:Play)-[r:PLAY_HAS_FORMATION]->(s:Stratigraphy) RETURN s.title AS s, r.discovery_count AS n",
     )
     assert play == [{"s": "BRENT GP", "n": 1}]
+
+
+# ── latest reserves snapshot on Field ───────────────────────────────────
+
+
+def test_field_carries_latest_reserves_and_produced_oe(tmp_path: Path) -> None:
+    nodes = {"Field": _spec("Field")}
+    csvs = {"field": FIELDS, "field_reserves": FIELD_RESERVES, "profiles": PROFILES}
+    _, graph = _build(tmp_path, csvs, nodes)
+    rows = _rows(
+        graph,
+        "MATCH (f:Field) RETURN f.title AS f, f.fldRemainingOE AS oe, f.fldReservesVersion AS v, "
+        "f.fldReservesDate AS d, f.fldProducedOE AS produced ORDER BY f",
+    )
+    assert [(r["f"], r["oe"], r["v"], str(r["d"]), r["produced"]) for r in rows] == [
+        ("EKOFISK", 103.194, 2015, "2015-12-31", 0.6),
+        # Two versions under one date: the later version is the latest.
+        ("FRØY", 0.0, 2025, "2024-12-31", None),
+    ]

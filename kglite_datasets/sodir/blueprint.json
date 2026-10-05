@@ -4,7 +4,7 @@
   },
   "nodes": {
     "Field": {
-      "csv": "csv/field.csv",
+      "csv": "csv/_derived_field.csv",
       "pk": "fldNpdidField",
       "title": "fldName",
       "properties": {
@@ -20,7 +20,24 @@
         "fldDateUpdatedMax": "date",
         "wkt_geometry": "geometry",
         "latitude": "location.lat",
-        "longitude": "location.lon"
+        "longitude": "location.lon",
+        "fldRecoverableOil": "float",
+        "fldRecoverableGas": "float",
+        "fldRecoverableNGL": "float",
+        "fldRecoverableCondensate": "float",
+        "fldRecoverableOE": "float",
+        "fldRemainingOil": "float",
+        "fldRemainingGas": "float",
+        "fldRemainingNGL": "float",
+        "fldRemainingCondensate": "float",
+        "fldRemainingOE": "float",
+        "fldInplaceOil": "float",
+        "fldInplaceAssLiquid": "float",
+        "fldInplaceAssGas": "float",
+        "fldInplaceFreeGas": "float",
+        "fldReservesDate": "date",
+        "fldReservesVersion": "int",
+        "fldProducedOE": "float"
       },
       "skipped": [
         "OBJECTID",
@@ -2258,7 +2275,14 @@
         "covered_discovery_ids": "list",
         "covered_discovery_count": "int",
         "chronology_date": "date",
-        "chronology_basis": "string"
+        "chronology_basis": "string",
+        "latest_estimate_date": "date",
+        "latest_resource_class": "string",
+        "latest_recoverable_oil": "float",
+        "latest_recoverable_gas": "float",
+        "latest_recoverable_ngl": "float",
+        "latest_recoverable_condensate": "float",
+        "latest_recoverable_oe": "float"
       },
       "skipped": [
         "dscNpdidDiscovery",

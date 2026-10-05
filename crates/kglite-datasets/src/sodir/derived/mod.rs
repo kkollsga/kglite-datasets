@@ -2,8 +2,8 @@
 //! not publish as such (status timelines, reserve version chains, enrichment
 //! junctions) and augmented copies of source tables.
 //!
-//! Each output is a `_derived_<name>.csv` in the CSV directory, built from the
-//! cached source CSVs it names. Only the outputs a blueprint references are
+//! Each output is a `_derived_<name>.csv` in the CSV directory, built from
+//! cached source CSVs. Only the outputs a blueprint references are
 //! built, so a custom blueprint pays for nothing it does not read. The source
 //! CSVs are never modified. An output whose primary source is missing is
 //! removed rather than left stale.
@@ -11,6 +11,7 @@
 //! Dates are written as `YYYY-MM-DD`. Half-open windows (`validTo`,
 //! `existsTo`) name the first day the row is no longer valid.
 
+mod anchors;
 mod enrich;
 mod reserves;
 mod status;
@@ -35,90 +36,98 @@ impl DerivedReport {
     }
 }
 
-/// One derived output: its stem, the source stems it reads (the first is
-/// required), and the builder.
+/// One derived output: its stem, the source it is built from, and the
+/// builder. The source is fetched for it; any other table a builder reads is
+/// used when cached (the packaged blueprint references all of them), so a
+/// derived output never makes the refresh download a table the blueprint
+/// does not name.
 struct Derived {
     stem: &'static str,
-    sources: &'static [&'static str],
+    source: &'static str,
     build: fn(&Path, &mut DerivedReport) -> Result<Table>,
 }
 
 const OUTPUTS: &[Derived] = &[
     Derived {
         stem: "_derived_wellbore",
-        sources: &["wellbore"],
+        source: "wellbore",
         build: status::wellbore,
     },
     Derived {
         stem: "_derived_wellbore_status_hst",
-        sources: &["wellbore"],
+        source: "wellbore",
         build: status::wellbore_status_hst,
     },
     Derived {
         stem: "_derived_well_status",
-        sources: &["wellbore"],
+        source: "wellbore",
         build: status::well_status,
     },
     Derived {
         stem: "_derived_facility_status_hst",
-        sources: &["facility"],
+        source: "facility",
         build: status::facility_status_hst,
     },
     Derived {
         stem: "_derived_pipeline_status_hst",
-        sources: &["pipeline"],
+        source: "pipeline",
         build: status::pipeline_status_hst,
     },
     Derived {
         stem: "_derived_facility_status",
-        sources: &["facility", "pipeline"],
+        source: "facility",
         build: status::facility_status,
     },
     Derived {
         stem: "_derived_field_reserves",
-        sources: &["field_reserves"],
+        source: "field_reserves",
         build: reserves::field_reserves,
     },
     Derived {
         stem: "_derived_discovery_reserves",
-        sources: &["discovery_reserves"],
+        source: "discovery_reserves",
         build: reserves::discovery_reserves,
     },
     Derived {
         stem: "_derived_field_reserves_company",
-        sources: &["field_reserves_company"],
+        source: "field_reserves_company",
         build: reserves::field_reserves_company,
     },
     Derived {
+        stem: "_derived_field",
+        source: "field",
+        build: anchors::field,
+    },
+    Derived {
         stem: "_derived_structural_elements",
-        sources: &["structural_elements"],
+        source: "structural_elements",
         build: enrich::structural_elements_table,
     },
     Derived {
         stem: "_derived_structural_encloses",
-        sources: &["structural_elements", "wellbore", "discovery"],
+        source: "structural_elements",
         build: enrich::structural_encloses,
     },
     Derived {
         stem: "_derived_play_encloses",
-        sources: &["play", "structural_elements"],
+        source: "play",
         build: enrich::play_encloses,
     },
     Derived {
         stem: "_derived_hc_in_formation",
-        sources: &["discovery", "wellbore", "strat_litho"],
+        source: "discovery",
         build: enrich::hc_in_formation,
     },
     Derived {
         stem: "_derived_play_has_formation",
-        sources: &["discovery", "wellbore", "strat_litho"],
+        source: "discovery",
         build: enrich::play_has_formation,
     },
 ];
 
-/// The source stems behind a derived output, or `None` for any other stem.
-pub fn sources_for(stem: &str) -> Option<&'static [&'static str]> {
-    OUTPUTS.iter().find(|d| d.stem == stem).map(|d| d.sources)
+/// The source stem behind a derived output, or `None` for any other stem.
+pub fn source_for(stem: &str) -> Option<&'static str> {
+    OUTPUTS.iter().find(|d| d.stem == stem).map(|d| d.source)
 }
 
 /// The registered derived stem equal to `stem`, if any.
@@ -131,7 +140,7 @@ pub fn apply(csv_dir: &Path, targets: &[&str]) -> Result<DerivedReport> {
     let mut report = DerivedReport::default();
     for output in OUTPUTS.iter().filter(|d| targets.contains(&d.stem)) {
         let path = csv_dir.join(format!("{}.csv", output.stem));
-        if !csv_dir.join(format!("{}.csv", output.sources[0])).is_file() {
+        if !csv_dir.join(format!("{}.csv", output.source)).is_file() {
             if path.is_file() {
                 std::fs::remove_file(&path)?;
             }

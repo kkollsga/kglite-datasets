@@ -211,6 +211,17 @@ later discovery when the earliest already has direct data; the field total is
 unused in that case. A discovery without a field may still use its own latest
 valid structured volume. Numeric zero remains a reported value.
 
+The `latest_*` columns always hold the discovery's own latest
+`DiscoveryReserves` estimate (`latest_estimate_date`, `latest_resource_class`,
+`latest_recoverable_oil` … `latest_recoverable_oe`), summed over its resource
+classes, whether or not the projection uses it. Read them for "the current
+estimate of this discovery"; sum only `recoverable_*` across discoveries.
+
+`Field` carries its latest `FieldReserves` version under the same property
+names (`fldRecoverableOE`, `fldRemainingOE`, …, `fldReservesDate`,
+`fldReservesVersion`) and `fldProducedOE`, its summed monthly net
+oil-equivalent production (MillSm3, set when positive).
+
 Redirected discoveries do not copy their reporting root's values: the terminal
 reporting root holds a selected structured volume once, while included
 discoveries receive explicit null components.

@@ -85,16 +85,25 @@ pub fn apply(csv_dir: &Path) -> Result<VolumeReport> {
     let discovery_snapshots =
         discovery_snapshots(&reserve_rows, &discoveries.redirects, &discoveries.ids);
     let field_snapshots = field_snapshots(&field_rows);
+    let own_snapshots = grouped_snapshots(
+        &reserve_rows,
+        "dscNpdidDiscovery",
+        "dscDateOffResEstDisplay",
+        false,
+    );
     let earliest = earliest_by_field(&discoveries.rows);
     let eligible_roots =
         eligible_discovery_roots(&discoveries.rows, &discovery_snapshots, &earliest);
-    let (output, report) = project_volumes(
+    let (mut output, report) = project_volumes(
         &discoveries.rows,
         &discovery_snapshots,
         &field_snapshots,
         &earliest,
         &eligible_roots,
     );
+    for (row, discovery) in output.iter_mut().zip(&discoveries.rows) {
+        row.extend(latest_columns(own_snapshots.get(&discovery.id)));
+    }
 
     write_rows(&csv_dir.join(OUTPUT), &output)?;
     Ok(report)
@@ -625,6 +634,22 @@ fn volume_row(
     row
 }
 
+/// The discovery's own latest `DiscoveryReserves` estimate, whether or not
+/// the projection uses it: date, resource classes, the five components.
+fn latest_columns(snapshot: Option<&Snapshot>) -> Vec<String> {
+    let Some(snapshot) = snapshot else {
+        return vec![String::new(); 7];
+    };
+    let mut out = vec![snapshot.date.clone(), snapshot.resource_class.clone()];
+    out.extend(
+        snapshot
+            .values
+            .iter()
+            .map(|value| value.map(|v| v.to_string()).unwrap_or_default()),
+    );
+    out
+}
+
 fn redirect_map(rows: &[Row]) -> BTreeMap<String, String> {
     rows.iter()
         .filter_map(|row| {
@@ -778,6 +803,13 @@ fn write_rows(path: &Path, rows: &[Vec<String>]) -> Result<()> {
             "covered_discovery_count",
             "chronology_date",
             "chronology_basis",
+            "latest_estimate_date",
+            "latest_resource_class",
+            "latest_recoverable_oil",
+            "latest_recoverable_gas",
+            "latest_recoverable_ngl",
+            "latest_recoverable_condensate",
+            "latest_recoverable_oe",
         ])
         .map_err(|error| SodirError::Csv(format!("header {}: {error}", tmp.display())))?;
     for row in rows {
@@ -1002,6 +1034,11 @@ mod tests {
         assert_eq!(rows[1]["unresolved_reason"], "later_field_discovery");
         assert!(rows[1]["recoverable_oil"].is_empty());
         assert!(rows[1]["source_record_json"].is_empty());
+        // The discovery's own latest estimate stays visible beside the
+        // non-duplicating projection.
+        assert_eq!(rows[1]["latest_recoverable_oil"], "6");
+        assert_eq!(rows[1]["latest_estimate_date"], "2025-12-31");
+        assert!(rows[0]["latest_recoverable_oil"].is_empty());
     }
 
     #[test]
