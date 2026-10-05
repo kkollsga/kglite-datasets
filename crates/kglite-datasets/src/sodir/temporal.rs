@@ -22,13 +22,14 @@
 //!   and business-arrangement days.
 //!
 //! The source CSVs are never modified. Bounds are compared as kglite reads
-//! them: `YYYY-MM-DD` (a time after it is ignored) or epoch milliseconds of
-//! nine digits or more; anything else is treated as missing, which kglite
-//! reads as an open bound.
+//! them: `YYYY-MM-DD` (a time after it is ignored), eight digits as
+//! `YYYYMMDD`, or epoch milliseconds of nine digits or more, negative before
+//! 1970; anything else is treated as missing, which kglite reads as an open
+//! bound.
 
 use std::path::Path;
 
-use chrono::{Duration, NaiveDate};
+use chrono::{Datelike, Duration, NaiveDate};
 
 use crate::sodir::error::Result;
 use crate::sodir::preprocess::{read_csv, write_csv};
@@ -298,12 +299,22 @@ pub(crate) fn parse_date(cell: &str) -> Option<NaiveDate> {
     if cell.len() >= 10 && cell.as_bytes()[4] == b'-' {
         return NaiveDate::parse_from_str(&cell[..10], "%Y-%m-%d").ok();
     }
-    let digits = cell.split('.').next().unwrap_or("");
-    if digits.len() >= 9 && digits.bytes().all(|b| b.is_ascii_digit()) {
-        let ms: i64 = digits.parse().ok()?;
-        return chrono::DateTime::from_timestamp_millis(ms).map(|dt| dt.date_naive());
-    }
-    None
+    // A whole number, possibly written as a float ("1451520000000.0").
+    let n: i64 = match cell.parse::<i64>() {
+        Ok(n) => n,
+        Err(_) => {
+            let f = cell.parse::<f64>().ok().filter(|f| f.is_finite())?;
+            f.trunc() as i64
+        }
+    };
+    let day = if (10_000_000..100_000_000).contains(&n) {
+        NaiveDate::parse_from_str(&n.to_string(), "%Y%m%d").ok()?
+    } else if n.unsigned_abs() >= 100_000_000 {
+        chrono::DateTime::from_timestamp_millis(n)?.date_naive()
+    } else {
+        return None;
+    };
+    (1..=9999).contains(&day.year()).then_some(day)
 }
 
 fn record_json(headers: &[String], row: &[String]) -> String {
@@ -336,6 +347,10 @@ mod tests {
         assert_eq!(parse_date("1451520000000"), d("2015-12-31"));
         assert_eq!(parse_date("1451520000000.0"), d("2015-12-31"));
         assert_eq!(parse_date("267840000000"), d("1978-06-28"));
+        // Before 1970 FactMaps writes negative epoch milliseconds.
+        assert_eq!(parse_date("-131846400000"), d("1965-10-28"));
+        assert_eq!(parse_date("-2208988800000"), d("1900-01-01"));
+        assert_eq!(parse_date("20151231"), d("2015-12-31"));
         // kglite stores these as NULL, an open bound.
         for junk in ["", "0", "0.0", "-86400000", "-86400000.0", "n/a"] {
             assert_eq!(parse_date(junk), None, "{junk:?}");

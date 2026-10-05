@@ -32,6 +32,14 @@ semantic versioning (workspace version in the root `Cargo.toml`).
   `preprocess` dict gains `well_status_periods`, `well_status_wells` and
   `wellbore_outcomes`.
 
+### Fixed
+
+- The valid-time filter read a negative epoch-millisecond date (FactMaps
+  writes every date before 1970 that way) as missing, so it could not see an
+  inverted row whose bound lies before 1970, which would fail the build. It
+  now reads dates exactly as kglite does, including `YYYYMMDD`. On the
+  October 2026 data the rejected rows are unchanged.
+
 ## [0.1.25] - 2026-10-05
 
 ### Breaking changes and migration
