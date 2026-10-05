@@ -21,11 +21,25 @@ semantic versioning (workspace version in the root `Cargo.toml`).
   completion, reclass, plugged, P&A) opens a period that lasts until the next
   one. The current `wlbStatus` closes the timeline with
   `basis: "inferred-start"` when it differs from the last event, because
-  Sodir gives no date for it. On the October 2026 FactMaps data: 26,270
-  periods on 9,257 wells; 15/9-F-12 reads `DRILLING` in July 2007,
+  Sodir gives no date for it. On the October 2026 FactMaps data: 26,338
+  periods on 9,291 wells; 15/9-F-12 reads `DRILLING` in July 2007,
   `COMPLETED` in 2012 and `P&A` today.
 - `Wellbore.wlbOutcome`: `JUNKED` or `BLOWOUT` (144 wells). These are
   outcomes, so they never appear as a `WellStatus`.
+- Facility and pipeline status:
+  `(Facility|Pipeline)-[:HAS_STATUS {validFrom, validTo, basis}]->(:FacilityStatus)`,
+  declared `half_open`. A facility is `IN SERVICE` from `fclStartupDate`,
+  `SHUT DOWN` from `fclDateShutdown` and `REMOVED` from `fclDateRemoved`,
+  closed by its current `fclPhase` as for wells. A startup date on a
+  `FUTURE`, `FABRICATION` or `INSTALLATION` facility is a plan and is
+  ignored. A pipeline has one period, its current phase from
+  `pplCurrentPhaseFromDate`: Sodir publishes no pipeline history. On the
+  October 2026 data: 941 periods on 811 facilities (14 `inferred-start`),
+  83 on pipelines.
+- `Facility.fclDateShutdown` and `Facility.fclDateRemoved`, new on the live
+  FactMaps layer. A cache fetched before Sodir added them still builds.
+- Status timelines ignore an event dated before 1960: Sodir writes
+  1900-01-01 (two facility shutdowns) for an unknown date.
 - Rust: `kglite_datasets::sodir::derived`, `sodir::source_stems`,
   `preprocess::apply_with_derived`, and a `derived` field on
   `PreprocessReport` (struct literals of it break). The refresh report's

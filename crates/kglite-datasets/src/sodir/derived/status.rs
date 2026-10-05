@@ -1,5 +1,6 @@
 //! Status timelines: `(Wellbore)-[:HAS_STATUS]->(:WellStatus)` from the
-//! wellbore's dated lifecycle events.
+//! wellbore's dated lifecycle events, and
+//! `(Facility|Pipeline)-[:HAS_STATUS]->(:FacilityStatus)`.
 //!
 //! Each dated event opens a period that lasts until the next event
 //! (half-open; the last period is open). Sodir publishes the current status
@@ -9,6 +10,15 @@
 //! completion), otherwise it starts on the last event's date. JUNKED and
 //! BLOWOUT are outcomes, not lifecycle stages: they go to `wlbOutcome` and
 //! never enter the timeline.
+//!
+//! A facility is IN SERVICE from startup, SHUT DOWN and REMOVED from the
+//! FactMaps `fclDateShutdown` / `fclDateRemoved` columns, closed by its
+//! current `fclPhase` under the same rule. A startup date on a facility that
+//! is not yet in service (FUTURE, FABRICATION, INSTALLATION) is a plan, not
+//! an event. Sodir writes 1900-01-01 (and a few older dates) for an unknown
+//! date; an event before 1960, before any activity on the shelf, is ignored.
+//! Sodir publishes no pipeline history: a pipeline has one period,
+//! its current phase from `pplCurrentPhaseFromDate`.
 
 use chrono::NaiveDate;
 
@@ -52,7 +62,28 @@ const WELL_STATUS_ORDER: &[&str] = &[
     "WILL NEVER BE DRILLED",
 ];
 
+const FACILITY_EVENTS: &[(&str, &str)] = &[
+    ("fclStartupDate", "IN SERVICE"),
+    ("fclDateShutdown", "SHUT DOWN"),
+    ("fclDateRemoved", "REMOVED"),
+];
+/// Facility phases that precede service.
+const FACILITY_PRE_SERVICE: &[&str] = &["FUTURE", "FABRICATION", "INSTALLATION"];
+
+/// Event dates before this are Sodir's "unknown" sentinels, not events.
+const EARLIEST_EVENT: NaiveDate = match NaiveDate::from_ymd_opt(1960, 1, 1) {
+    Some(d) => d,
+    None => panic!("valid date"),
+};
+
+/// A lifecycle event date, or `None` for a missing or sentinel date.
+fn event_date(cell: &str) -> Option<NaiveDate> {
+    date(cell).filter(|d| *d >= EARLIEST_EVENT)
+}
+
 const WELL_KEY: &str = "wlbNpdidWellbore";
+const FACILITY_KEY: &str = "fclNpdidFacility";
+const PIPELINE_KEY: &str = "pplNpdidPipeline";
 const BASIS_REPORTED: &str = "reported";
 const BASIS_INFERRED: &str = "inferred-start";
 
@@ -128,7 +159,7 @@ pub(crate) fn well_timelines(wells: &Table) -> Vec<(String, Vec<Period>)> {
             let events: Vec<_> = cols
                 .iter()
                 .zip(WELL_EVENTS)
-                .map(|(col, (_, label))| (date(col.get(row)), *label))
+                .map(|(col, (_, label))| (event_date(col.get(row)), *label))
                 .collect();
             let cur = status.get(row);
             let cur = (!cur.is_empty() && outcome(cur).is_none()).then_some(cur);
@@ -207,6 +238,128 @@ fn status_nodes(order: &[&str], extra: std::collections::BTreeSet<String>) -> Ta
         out.push(vec![name, String::new()]);
     }
     out
+}
+
+/// Every facility's status periods, keyed by its NPDID, in source order.
+fn facility_timelines(facilities: &Table) -> Vec<(String, Vec<Period>)> {
+    let key = facilities.getter(FACILITY_KEY);
+    let phase = facilities.getter("fclPhase");
+    let cols: Vec<_> = FACILITY_EVENTS
+        .iter()
+        .map(|(c, _)| facilities.getter(c))
+        .collect();
+    facilities
+        .rows
+        .iter()
+        .map(|row| {
+            let cur = phase.get(row);
+            let planned = FACILITY_PRE_SERVICE.contains(&cur);
+            let events: Vec<_> = cols
+                .iter()
+                .zip(FACILITY_EVENTS)
+                .enumerate()
+                .map(|(i, (col, (_, label)))| {
+                    let day = if i == 0 && planned {
+                        None
+                    } else {
+                        event_date(col.get(row))
+                    };
+                    (day, *label)
+                })
+                .collect();
+            let cur = (!cur.is_empty()).then_some(cur);
+            (key.get(row).to_string(), timeline(&events, cur, None))
+        })
+        .collect()
+}
+
+fn pipeline_periods(pipelines: &Table) -> Vec<(String, Period)> {
+    let key = pipelines.getter(PIPELINE_KEY);
+    let phase = pipelines.getter("pplCurrentPhase");
+    let from = pipelines.getter("pplCurrentPhaseFromDate");
+    pipelines
+        .rows
+        .iter()
+        .filter_map(|row| {
+            let status = phase.get(row);
+            let from = event_date(from.get(row))?;
+            (!status.is_empty()).then(|| {
+                (
+                    key.get(row).to_string(),
+                    Period {
+                        status: status.to_string(),
+                        from,
+                        to: None,
+                        basis: BASIS_REPORTED,
+                    },
+                )
+            })
+        })
+        .collect()
+}
+
+fn period_table(key: &str, periods: impl IntoIterator<Item = (String, Period)>) -> Table {
+    let mut out = Table::new(&[key, "status", "validFrom", "validTo", "basis"]);
+    for (id, p) in periods {
+        out.push(vec![
+            id,
+            p.status,
+            iso(Some(p.from)),
+            iso(p.to),
+            p.basis.to_string(),
+        ]);
+    }
+    out
+}
+
+/// Facility `HAS_STATUS` junction.
+pub(super) fn facility_status_hst(
+    csv_dir: &std::path::Path,
+    report: &mut DerivedReport,
+) -> Result<Table> {
+    let facilities = Table::read(&csv_dir.join("facility.csv"))?;
+    let periods = facility_timelines(&facilities)
+        .into_iter()
+        .flat_map(|(id, ps)| ps.into_iter().map(move |p| (id.clone(), p)));
+    let out = period_table(FACILITY_KEY, periods);
+    report.add("facility_status_periods", out.rows.len());
+    Ok(out)
+}
+
+/// Pipeline `HAS_STATUS` junction.
+pub(super) fn pipeline_status_hst(
+    csv_dir: &std::path::Path,
+    report: &mut DerivedReport,
+) -> Result<Table> {
+    let pipelines = Table::read(&csv_dir.join("pipeline.csv"))?;
+    let out = period_table(PIPELINE_KEY, pipeline_periods(&pipelines));
+    report.add("pipeline_status_periods", out.rows.len());
+    Ok(out)
+}
+
+/// The `FacilityStatus` nodes: every status a facility or pipeline period
+/// uses, sorted.
+pub(super) fn facility_status(csv_dir: &std::path::Path, _: &mut DerivedReport) -> Result<Table> {
+    let mut names = std::collections::BTreeSet::new();
+    let facilities = csv_dir.join("facility.csv");
+    if facilities.is_file() {
+        for (_, periods) in facility_timelines(&Table::read(&facilities)?) {
+            names.extend(periods.into_iter().map(|p| p.status));
+        }
+    }
+    let pipelines = csv_dir.join("pipeline.csv");
+    if pipelines.is_file() {
+        names.extend(
+            pipeline_periods(&Table::read(&pipelines)?)
+                .into_iter()
+                .map(|(_, p)| p.status),
+        );
+    }
+    let mut out = Table::new(&["name"]);
+    for name in names {
+        out.push(vec![name]);
+    }
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -319,6 +472,41 @@ mod tests {
         assert_eq!(junked, ["DRILLING", "COMPLETED"]);
         assert!(t[1].1.is_empty());
         assert_eq!(summary(&t[2].1).len(), 1);
+    }
+
+    #[test]
+    fn facility_events_skip_planned_startups_and_sentinels() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("facility.csv");
+        std::fs::write(
+            &path,
+            "fclNpdidFacility,fclPhase,fclStartupDate,fclDateShutdown,fclDateRemoved\n\
+             1,REMOVED,1980-01-01,1999-01-01,2005-06-01\n\
+             2,FUTURE,2030-01-01,,\n\
+             3,SHUT DOWN,1990-01-01,-2208988800000,\n",
+        )
+        .unwrap();
+        let t = facility_timelines(&Table::read(&path).unwrap());
+        let names = |ps: &[Period]| ps.iter().map(|p| p.status.clone()).collect::<Vec<_>>();
+        assert_eq!(names(&t[0].1), ["IN SERVICE", "SHUT DOWN", "REMOVED"]);
+        assert!(t[1].1.is_empty());
+        assert_eq!(
+            summary(&t[2].1),
+            [
+                (
+                    "IN SERVICE".into(),
+                    "1990-01-01".into(),
+                    "1990-01-01".into(),
+                    "reported"
+                ),
+                (
+                    "SHUT DOWN".into(),
+                    "1990-01-01".into(),
+                    String::new(),
+                    BASIS_INFERRED
+                ),
+            ]
+        );
     }
 
     #[test]

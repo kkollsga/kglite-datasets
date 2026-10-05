@@ -130,3 +130,64 @@ def test_outcomes_are_a_property_not_a_status(tmp_path: Path) -> None:
     assert order == [{"o": 15}]
     # A well with no dated event has no status period.
     assert _status(graph, "NEVER-1", valid_at="all") == []
+
+
+# ── facility and pipeline status ────────────────────────────────────────
+
+FACILITIES = (
+    "fclNpdidFacility,fclName,fclPhase,fclStartupDate,fclDateShutdown,fclDateRemoved\n"
+    "10,IN-SERVICE,IN SERVICE,2000-01-01,,\n"
+    "11,GONE,REMOVED,1980-01-01,1999-01-01,2005-06-01\n"
+    # A startup date on a facility not yet in service is a plan.
+    "12,PLANNED,FUTURE,2030-01-01,,\n"
+    # Sodir's 1900-01-01 'unknown' sentinel is no date.
+    "13,STOPPED,SHUT DOWN,1990-01-01,-2208988800000,\n"
+)
+PIPELINES = (
+    "pplNpdidPipeline,pplName,pplCurrentPhase,pplCurrentPhaseFromDate\n"
+    "20,PIPE-1,IN SERVICE,1995-10-01\n"
+    "21,PIPE-2,DECOMMISSIONED,\n"
+)
+
+
+def _facility_nodes() -> dict:
+    return {
+        "Facility": _spec("Facility", junctions=("HAS_STATUS",)),
+        "Pipeline": _spec("Pipeline", junctions=("HAS_STATUS",)),
+        "FacilityStatus": _spec("FacilityStatus"),
+    }
+
+
+def _fstatus(graph, label: str, name: str, **kwargs) -> list:
+    query = (
+        f"MATCH (f:{label} {{title: $name}})-[r:HAS_STATUS]->(s:FacilityStatus) "
+        "RETURN s.title AS status, r.basis AS basis ORDER BY r.validFrom"
+    )
+    return [(r["status"], r["basis"]) for r in _rows(graph, query, params={"name": name}, **kwargs)]
+
+
+def test_facility_status_follows_startup_shutdown_and_removal(tmp_path: Path) -> None:
+    _, graph = _build(tmp_path, {"facility": FACILITIES, "pipeline": PIPELINES}, _facility_nodes())
+    assert _fstatus(graph, "Facility", "IN-SERVICE") == [("IN SERVICE", "reported")]
+    assert _fstatus(graph, "Facility", "GONE", valid_at="1990-01-01") == [("IN SERVICE", "reported")]
+    assert _fstatus(graph, "Facility", "GONE", valid_at="2000-01-01") == [("SHUT DOWN", "reported")]
+    assert _fstatus(graph, "Facility", "GONE") == [("REMOVED", "reported")]
+    assert _fstatus(graph, "Facility", "PLANNED", valid_at="all") == []
+    assert _fstatus(graph, "Facility", "STOPPED") == [("SHUT DOWN", "inferred-start")]
+    dates = _rows(graph, "MATCH (f:Facility {title: 'GONE'}) RETURN f.fclDateShutdown AS s, f.fclDateRemoved AS r")
+    assert [(str(d["s"]), str(d["r"])) for d in dates] == [("1999-01-01", "2005-06-01")]
+
+
+def test_pipeline_status_is_its_current_phase(tmp_path: Path) -> None:
+    _, graph = _build(tmp_path, {"facility": FACILITIES, "pipeline": PIPELINES}, _facility_nodes())
+    assert _fstatus(graph, "Pipeline", "PIPE-1") == [("IN SERVICE", "reported")]
+    assert _fstatus(graph, "Pipeline", "PIPE-1", valid_at="1995-09-30") == []
+    assert _fstatus(graph, "Pipeline", "PIPE-2", valid_at="all") == []
+    names = [r["s"] for r in _rows(graph, "MATCH (s:FacilityStatus) RETURN s.title AS s ORDER BY s")]
+    assert names == ["IN SERVICE", "REMOVED", "SHUT DOWN"]
+
+
+def test_facility_cache_without_lifecycle_columns_still_builds(tmp_path: Path) -> None:
+    older = "fclNpdidFacility,fclName,fclPhase,fclStartupDate\n10,IN-SERVICE,IN SERVICE,2000-01-01\n"
+    _, graph = _build(tmp_path, {"facility": older, "pipeline": PIPELINES}, _facility_nodes())
+    assert _fstatus(graph, "Facility", "IN-SERVICE") == [("IN SERVICE", "reported")]

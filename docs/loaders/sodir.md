@@ -105,6 +105,20 @@ g.cypher("MATCH (w:Wellbore {title: '15/9-F-12'})-[:HAS_STATUS]->(s) RETURN s.ti
 - `WellStatus.phase_order` is the lifecycle position (`PERMITTED` = 1 …
   `WILL NEVER BE DRILLED` = 16); a status outside that list has none.
 
+`(Facility)-[:HAS_STATUS]->(:FacilityStatus)` follows the same rules:
+
+- `IN SERVICE` from `fclStartupDate`, `SHUT DOWN` from `fclDateShutdown`,
+  `REMOVED` from `fclDateRemoved`; the current `fclPhase` closes the
+  timeline.
+- A startup date on a `FUTURE`, `FABRICATION` or `INSTALLATION` facility is
+  a plan, not an event, and is ignored.
+
+A `Pipeline` has one `HAS_STATUS` period: its `pplCurrentPhase` from
+`pplCurrentPhaseFromDate`. Sodir publishes no pipeline history.
+
+An event dated before 1960 is ignored everywhere: Sodir writes 1900-01-01 for
+an unknown date.
+
 ## Play assignments
 
 The packaged enhancement assigns every matching `Discovery IN_PLAY`

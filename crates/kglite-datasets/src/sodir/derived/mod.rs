@@ -57,6 +57,21 @@ const OUTPUTS: &[Derived] = &[
         sources: &["wellbore"],
         build: status::well_status,
     },
+    Derived {
+        stem: "_derived_facility_status_hst",
+        sources: &["facility"],
+        build: status::facility_status_hst,
+    },
+    Derived {
+        stem: "_derived_pipeline_status_hst",
+        sources: &["pipeline"],
+        build: status::pipeline_status_hst,
+    },
+    Derived {
+        stem: "_derived_facility_status",
+        sources: &["facility", "pipeline"],
+        build: status::facility_status,
+    },
 ];
 
 /// The source stems behind a derived output, or `None` for any other stem.

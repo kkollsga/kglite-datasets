@@ -1719,7 +1719,9 @@
         "fclFormalName2Block": "float",
         "wkt_geometry": "geometry",
         "latitude": "location.lat",
-        "longitude": "location.lon"
+        "longitude": "location.lon",
+        "fclDateShutdown": "date",
+        "fclDateRemoved": "date"
       },
       "skipped": [
         "OBJECTID",
@@ -1748,6 +1750,28 @@
           "OPERATED_BY": {
             "target": "Company",
             "fk": "fclNpdidCurrentOperator"
+          }
+        },
+        "junction_edges": {
+          "HAS_STATUS": {
+            "csv": "csv/_derived_facility_status_hst.csv",
+            "source_fk": "fclNpdidFacility",
+            "target": "FacilityStatus",
+            "target_fk": "status",
+            "properties": [
+              "validFrom",
+              "validTo",
+              "basis"
+            ],
+            "property_types": {
+              "validFrom": "date",
+              "validTo": "date"
+            },
+            "temporal": {
+              "from": "validFrom",
+              "to": "validTo",
+              "convention": "half_open"
+            }
           }
         }
       },
@@ -1823,8 +1847,36 @@
             "target": "Company",
             "fk": "cmpNpdidCompany"
           }
+        },
+        "junction_edges": {
+          "HAS_STATUS": {
+            "csv": "csv/_derived_pipeline_status_hst.csv",
+            "source_fk": "pplNpdidPipeline",
+            "target": "FacilityStatus",
+            "target_fk": "status",
+            "properties": [
+              "validFrom",
+              "validTo",
+              "basis"
+            ],
+            "property_types": {
+              "validFrom": "date",
+              "validTo": "date"
+            },
+            "temporal": {
+              "from": "validFrom",
+              "to": "validTo",
+              "convention": "half_open"
+            }
+          }
         }
       }
+    },
+    "FacilityStatus": {
+      "csv": "csv/_derived_facility_status.csv",
+      "pk": "name",
+      "title": "name",
+      "properties": {}
     },
     "Block": {
       "csv": "csv/block.csv",
