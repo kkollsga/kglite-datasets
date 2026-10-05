@@ -127,7 +127,7 @@
       },
       "sub_nodes": {
         "FieldReserves": {
-          "csv": "csv/field_reserves.csv",
+          "csv": "csv/_derived_field_reserves.csv",
           "pk": "auto",
           "title": "fldDateOffResEstDisplay",
           "parent_fk": "fldNpdidField",
@@ -147,7 +147,9 @@
             "fldInplaceAssLiquid": "float",
             "fldInplaceAssGas": "float",
             "fldInplaceFreeGas": "float",
-            "fldVersion": "int"
+            "fldVersion": "int",
+            "existsFrom": "date",
+            "existsTo": "date"
           },
           "skipped": [
             "OBJECTID",
@@ -160,6 +162,11 @@
                 "fk": "fldNpdidField"
               }
             }
+          },
+          "temporal": {
+            "from": "existsFrom",
+            "to": "existsTo",
+            "convention": "half_open"
           }
         },
         "FieldDescription": {
@@ -377,7 +384,7 @@
           }
         },
         "FieldReservesCompany": {
-          "csv": "csv/field_reserves_company.csv",
+          "csv": "csv/_derived_field_reserves_company.csv",
           "pk": "auto",
           "title": "fldName",
           "parent_fk": "fldNpdidField",
@@ -399,7 +406,9 @@
             "cmpShare": "float",
             "cmpNpdidCompany": "int",
             "cmpRecoverableOE": "float",
-            "cmpRemainingOE": "float"
+            "cmpRemainingOE": "float",
+            "existsFrom": "date",
+            "existsTo": "date"
           },
           "skipped": [
             "OBJECTID",
@@ -412,6 +421,11 @@
                 "fk": "fldNpdidField"
               }
             }
+          },
+          "temporal": {
+            "from": "existsFrom",
+            "to": "existsTo",
+            "convention": "half_open"
           }
         },
         "FieldImage": {
@@ -1171,7 +1185,7 @@
       },
       "sub_nodes": {
         "DiscoveryReserves": {
-          "csv": "csv/discovery_reserves.csv",
+          "csv": "csv/_derived_discovery_reserves.csv",
           "pk": "auto",
           "title": "dscDateOffResEstDisplay",
           "parent_fk": "dscNpdidDiscovery",
@@ -1183,7 +1197,9 @@
             "dscRecoverableCondensate": "float",
             "dscRecoverableOe": "float",
             "dscReservesRC": "string",
-            "dscReservesDateUpdated": "date"
+            "dscReservesDateUpdated": "date",
+            "existsFrom": "date",
+            "existsTo": "date"
           },
           "skipped": [
             "OBJECTID",
@@ -1196,6 +1212,11 @@
                 "fk": "dscNpdidDiscovery"
               }
             }
+          },
+          "temporal": {
+            "from": "existsFrom",
+            "to": "existsTo",
+            "convention": "half_open"
           }
         },
         "DiscoveryDescription": {

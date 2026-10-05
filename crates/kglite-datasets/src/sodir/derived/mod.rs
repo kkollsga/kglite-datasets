@@ -11,6 +11,7 @@
 //! Dates are written as `YYYY-MM-DD`. Half-open windows (`validTo`,
 //! `existsTo`) name the first day the row is no longer valid.
 
+mod reserves;
 mod status;
 
 use std::collections::BTreeMap;
@@ -71,6 +72,21 @@ const OUTPUTS: &[Derived] = &[
         stem: "_derived_facility_status",
         sources: &["facility", "pipeline"],
         build: status::facility_status,
+    },
+    Derived {
+        stem: "_derived_field_reserves",
+        sources: &["field_reserves"],
+        build: reserves::field_reserves,
+    },
+    Derived {
+        stem: "_derived_discovery_reserves",
+        sources: &["discovery_reserves"],
+        build: reserves::discovery_reserves,
+    },
+    Derived {
+        stem: "_derived_field_reserves_company",
+        sources: &["field_reserves_company"],
+        build: reserves::field_reserves_company,
     },
 ];
 

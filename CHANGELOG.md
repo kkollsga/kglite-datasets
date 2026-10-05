@@ -8,6 +8,12 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 
 ### Breaking changes and migration
 
+- **Behaviour change:** `FieldReserves`, `DiscoveryReserves` and
+  `FieldReservesCompany` are declared valid time, so a query with no
+  `FOR VALID_TIME` prefix reads only the version in force today: 144 of
+  2,333 `FieldReserves` on the October 2026 data. **Do:** pass
+  `valid_at="all"` (or prefix `FOR VALID_TIME ALL`) for every version, or
+  `valid_at="2015-06-30"` for the version in force on a date.
 - **Behaviour change:** the `Wellbore` node reads
   `csv/_derived_wellbore.csv`, a copy of `wellbore.csv` the refresh writes
   with the derived columns below. A complement that overrides
@@ -38,6 +44,16 @@ semantic versioning (workspace version in the root `Cargo.toml`).
   83 on pipelines.
 - `Facility.fclDateShutdown` and `Facility.fclDateRemoved`, new on the live
   FactMaps layer. A cache fetched before Sodir added them still builds.
+- Reserves version chains: each `FieldReserves`, `DiscoveryReserves` and
+  `FieldReservesCompany` row carries `existsFrom` (its as-of date) and
+  `existsTo` (the entity's next as-of date), declared `half_open`. Ekofisk
+  on 2015-06-30 reads the 2014-12-31 version. Rows of one version are valid
+  together (a discovery's resource classes, a field's companies); a company
+  missing from the next version drops out. Two `FieldReserves` versions
+  under one date are ordered by `fldVersion`, and the earlier one is valid on
+  no day (2 rows). Sodir publishes `DiscoveryReserves` and
+  `FieldReservesCompany` for the latest date only, so they have no earlier
+  version.
 - Status timelines ignore an event dated before 1960: Sodir writes
   1900-01-01 (two facility shutdowns) for an unknown date.
 - Rust: `kglite_datasets::sodir::derived`, `sodir::source_stems`,

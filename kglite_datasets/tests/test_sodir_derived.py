@@ -191,3 +191,81 @@ def test_facility_cache_without_lifecycle_columns_still_builds(tmp_path: Path) -
     older = "fclNpdidFacility,fclName,fclPhase,fclStartupDate\n10,IN-SERVICE,IN SERVICE,2000-01-01\n"
     _, graph = _build(tmp_path, {"facility": older, "pipeline": PIPELINES}, _facility_nodes())
     assert _fstatus(graph, "Facility", "IN-SERVICE") == [("IN SERVICE", "reported")]
+
+
+# ── reserves version chains ─────────────────────────────────────────────
+
+FIELDS = "fldNpdidField,fldName\n1,EKOFISK\n2,FRØY\n"
+FIELD_RESERVES = (
+    "fldNpdidField,fldDateOffResEstDisplay,fldVersion,fldRemainingOE\n"
+    "1,1388448000000,2013,140.289\n"
+    "1,1419984000000,2014,122.353\n"
+    "1,1451520000000,2015,103.194\n"
+    # Two versions published under one date: the later version wins.
+    "2,1735603200000,2024,1.0\n"
+    "2,1735603200000,2025,0.0\n"
+)
+FIELD_RESERVES_COMPANY = (
+    "fldNpdidField,fldName,cmpNpdidCompany,cmpLongName,cmpDateOffResEstDisplay,cmpRemainingOE\n"
+    "1,EKOFISK,1,Alpha,2014-12-31,60\n"
+    "1,EKOFISK,2,Beta,2014-12-31,40\n"
+    "1,EKOFISK,1,Alpha,2015-12-31,100\n"
+)
+DISCOVERIES = "dscNpdidDiscovery,dscName\n7,D7\n8,D8\n"
+DISCOVERY_RESERVES = (
+    "dscNpdidDiscovery,dscDateOffResEstDisplay,dscReservesRC,dscRecoverableOe\n"
+    # Two resource classes of one version.
+    "7,2025-12-31,4F,8.4\n"
+    "7,2025-12-31,5F,1.6\n"
+    "8,2010-12-31,7F,3.0\n"
+    "8,2012-12-31,5F,2.0\n"
+)
+
+
+def _reserves_graph(tmp_path: Path):
+    nodes = {
+        "Field": _spec("Field", sub_nodes=("FieldReserves", "FieldReservesCompany")),
+        "Discovery": _spec("Discovery", sub_nodes=("DiscoveryReserves",)),
+    }
+    csvs = {
+        "field": FIELDS,
+        "field_reserves": FIELD_RESERVES,
+        "field_reserves_company": FIELD_RESERVES_COMPANY,
+        "discovery": DISCOVERIES,
+        "discovery_reserves": DISCOVERY_RESERVES,
+    }
+    return _build(tmp_path, csvs, nodes)[1]
+
+
+def test_field_reserves_read_the_version_in_force(tmp_path: Path) -> None:
+    graph = _reserves_graph(tmp_path)
+    query = (
+        "MATCH (f:Field {title: $f})<-[:OF_FIELD]-(r:FieldReserves) "
+        "RETURN r.fldVersion AS v, r.fldRemainingOE AS oe ORDER BY v"
+    )
+    assert _rows(graph, query, params={"f": "EKOFISK"}, valid_at="2015-06-30") == [{"v": 2014, "oe": 122.353}]
+    assert _rows(graph, query, params={"f": "EKOFISK"}) == [{"v": 2015, "oe": 103.194}]
+    assert _rows(graph, query, params={"f": "EKOFISK"}, valid_at="2013-06-30") == []
+    assert len(_rows(graph, query, params={"f": "EKOFISK"}, valid_at="all")) == 3
+    assert _rows(graph, query, params={"f": "FRØY"}) == [{"v": 2025, "oe": 0.0}]
+    window = _rows(
+        graph,
+        "MATCH (r:FieldReserves {fldVersion: 2014}) RETURN r.existsFrom AS f, r.existsTo AS t",
+        valid_at="all",
+    )
+    assert [(str(w["f"]), str(w["t"])) for w in window] == [("2014-12-31", "2015-12-31")]
+
+
+def test_company_and_discovery_reserves_chain_per_version(tmp_path: Path) -> None:
+    graph = _reserves_graph(tmp_path)
+    companies = "MATCH (r:FieldReservesCompany) RETURN r.cmpLongName AS c, r.cmpRemainingOE AS oe ORDER BY c"
+    assert _rows(graph, companies, valid_at="2015-06-30") == [{"c": "Alpha", "oe": 60.0}, {"c": "Beta", "oe": 40.0}]
+    # Beta is not in the 2015 version: it is no longer in force.
+    assert _rows(graph, companies) == [{"c": "Alpha", "oe": 100.0}]
+    discovery = (
+        "MATCH (d:Discovery {title: $d})<-[:OF_DISCOVERY]-(r:DiscoveryReserves) "
+        "RETURN r.dscReservesRC AS rc ORDER BY rc"
+    )
+    assert _rows(graph, discovery, params={"d": "D7"}) == [{"rc": "4F"}, {"rc": "5F"}]
+    assert _rows(graph, discovery, params={"d": "D8"}, valid_at="2011-06-30") == [{"rc": "7F"}]
+    assert _rows(graph, discovery, params={"d": "D8"}) == [{"rc": "5F"}]

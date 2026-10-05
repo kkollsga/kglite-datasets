@@ -76,6 +76,25 @@ Rules that follow from the source:
 Seismic plan and weekly windows (`seaPlanFromDate`, `seaWeekly…`) are activity
 dates, not validity, and are plain `date` properties.
 
+## Reserves versions
+
+`FieldReserves`, `DiscoveryReserves` and `FieldReservesCompany` are version
+chains, declared `half_open` on `existsFrom` / `existsTo`. A version is valid
+from its as-of date until the entity's next as-of date.
+
+```python
+g.cypher("MATCH (f:Field {title: 'EKOFISK'})<-[:OF_FIELD]-(r:FieldReserves) "
+         "RETURN r.fldVersion, r.fldRemainingOE", valid_at="2015-06-30")  # the 2014 version
+```
+
+- All rows of one version are valid together: a discovery's resource
+  classes, a field's companies. A company missing from the next version is
+  no longer in force.
+- Two `FieldReserves` versions under one date are ordered by `fldVersion`;
+  the earlier one is valid on no day.
+- Sodir publishes `DiscoveryReserves` and `FieldReservesCompany` for the
+  latest date only, so an as-of date before it finds none.
+
 ## Status timelines
 
 `(Wellbore)-[:HAS_STATUS {validFrom, validTo, basis}]->(:WellStatus)` is the
