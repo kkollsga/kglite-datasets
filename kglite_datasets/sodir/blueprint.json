@@ -1108,7 +1108,7 @@
       }
     },
     "Discovery": {
-      "csv": "csv/discovery.csv",
+      "csv": "csv/_derived_discovery.csv",
       "pk": "dscNpdidDiscovery",
       "title": "dscName",
       "properties": {
@@ -1127,7 +1127,8 @@
         "dscDateUpdatedMax": "date",
         "wkt_geometry": "geometry",
         "latitude": "location.lat",
-        "longitude": "location.lon"
+        "longitude": "location.lon",
+        "nmaName": "string"
       },
       "skipped": [
         "OBJECTID",
@@ -1137,7 +1138,6 @@
         "_geometry",
         "cmpLongName",
         "cmpNpdidCompany",
-        "nmaName",
         "dscFactMapUrl",
         "dscFactPageUrl",
         "dscGUID",
@@ -1539,7 +1539,7 @@
       }
     },
     "Licence": {
-      "csv": "csv/licence.csv",
+      "csv": "csv/_derived_licence.csv",
       "pk": "prlNpdidLicence",
       "title": "prlName",
       "properties": {
@@ -1812,7 +1812,7 @@
           }
         },
         "LicenceTask": {
-          "csv": "csv/licence_task.csv",
+          "csv": "csv/_derived_licence_task.csv",
           "pk": "prlTaskID",
           "title": "prlTaskTypeEn",
           "parent_fk": "prlNpdidLicence",
@@ -2037,7 +2037,7 @@
       "properties": {}
     },
     "Block": {
-      "csv": "csv/block.csv",
+      "csv": "csv/_derived_block.csv",
       "pk": "blcNpdidBlock",
       "title": "blcName",
       "properties": {

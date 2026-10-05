@@ -38,6 +38,10 @@ workdir/
 The loader derives foreign-key relationships during a `preprocess` join pass and
 converts ArcGIS geometry to WKT before the graph build.
 
+Main areas are upper case on every type (`NORTH SEA`, `NORWEGIAN SEA`,
+`BARENTS SEA`), as `wlbMainArea` is at the source. Sodir's export mixes
+`North sea` and `Barents Sea` on the other tables.
+
 ## Valid time
 
 The packaged graph declares Sodir's history tables as validity intervals.

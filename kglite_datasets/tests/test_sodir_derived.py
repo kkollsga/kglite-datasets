@@ -458,3 +458,45 @@ def test_field_carries_latest_reserves_and_produced_oe(tmp_path: Path) -> None:
         # Two versions under one date: the later version is the latest.
         ("FRØY", 0.0, 2025, "2024-12-31", None),
     ]
+
+
+# ── main-area casing ────────────────────────────────────────────────────
+
+
+def test_main_areas_use_the_wellbore_casing(tmp_path: Path) -> None:
+    nodes = {
+        "Field": _spec("Field"),
+        "Discovery": _spec("Discovery", sub_nodes=("DiscoveryPoly",)),
+        "Licence": _spec("Licence", sub_nodes=("LicenceTask",)),
+        "Block": _spec("Block"),
+    }
+    csvs = {
+        "field": "fldNpdidField,fldName,fldMainArea\n1,EKOFISK,North sea\n",
+        "discovery": "dscNpdidDiscovery,dscName,nmaName\n7,D7,Norwegian sea\n",
+        "discovery_poly_hst": (
+            "dscNpdidDiscovery,dscName,nmaName,dscDateValidFrom,dscDateValidTo\n7,D7,Norwegian sea,2000-01-01,\n"
+        ),
+        "licence": "prlNpdidLicence,prlName,prlMainArea\n100,PL100,Barents sea\n",
+        "licence_task": "prlTaskID,prlNpdidLicence,prlTaskTypeEn,prlMainArea\n1,100,Drill,Barents sea\n",
+        "block": "blcNpdidBlock,blcName,blcMainArea\n1,7/1,Barents Sea\n2,7/2,Barents sea\n",
+    }
+    _, graph = _build(tmp_path, csvs, nodes)
+    areas = {
+        query.split(":")[1].split(")")[0]: sorted({r["a"] for r in _rows(graph, query)})
+        for query in (
+            "MATCH (n:Field) RETURN n.fldMainArea AS a",
+            "MATCH (n:Discovery) RETURN n.nmaName AS a",
+            "MATCH (n:DiscoveryPoly) RETURN n.nmaName AS a",
+            "MATCH (n:Licence) RETURN n.prlMainArea AS a",
+            "MATCH (n:LicenceTask) RETURN n.prlMainArea AS a",
+            "MATCH (n:Block) RETURN n.blcMainArea AS a",
+        )
+    }
+    assert areas == {
+        "Field": ["NORTH SEA"],
+        "Discovery": ["NORWEGIAN SEA"],
+        "DiscoveryPoly": ["NORWEGIAN SEA"],
+        "Licence": ["BARENTS SEA"],
+        "LicenceTask": ["BARENTS SEA"],
+        "Block": ["BARENTS SEA"],
+    }

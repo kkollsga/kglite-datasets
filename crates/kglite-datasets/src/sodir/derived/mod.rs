@@ -99,6 +99,26 @@ const OUTPUTS: &[Derived] = &[
         build: anchors::field,
     },
     Derived {
+        stem: "_derived_licence",
+        source: "licence",
+        build: anchors::licence,
+    },
+    Derived {
+        stem: "_derived_licence_task",
+        source: "licence_task",
+        build: anchors::licence_task,
+    },
+    Derived {
+        stem: "_derived_discovery",
+        source: "discovery",
+        build: anchors::discovery,
+    },
+    Derived {
+        stem: "_derived_block",
+        source: "block",
+        build: anchors::block,
+    },
+    Derived {
         stem: "_derived_structural_elements",
         source: "structural_elements",
         build: enrich::structural_elements_table,
@@ -205,6 +225,26 @@ impl Table {
     pub fn push(&mut self, row: Vec<String>) {
         debug_assert_eq!(row.len(), self.headers.len());
         self.rows.push(row);
+    }
+}
+
+/// Main-area columns. Sodir's 2026 export writes `North sea` on some tables
+/// and `NORTH SEA` (`wlbMainArea`) or `Barents Sea` on others, so an area
+/// filter matched one type only; every derived copy upper-cases them.
+const MAIN_AREA_COLUMNS: &[&str] = &["fldMainArea", "nmaName", "prlMainArea", "blcMainArea"];
+
+/// Upper-case the main-area columns of `rows` in place.
+pub(crate) fn upper_main_areas(headers: &[String], rows: &mut [Vec<String>]) {
+    for (i, _) in headers
+        .iter()
+        .enumerate()
+        .filter(|(_, h)| MAIN_AREA_COLUMNS.contains(&h.as_str()))
+    {
+        for row in rows.iter_mut() {
+            if let Some(cell) = row.get_mut(i) {
+                *cell = cell.to_uppercase();
+            }
+        }
     }
 }
 

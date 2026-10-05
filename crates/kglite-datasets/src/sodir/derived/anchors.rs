@@ -1,6 +1,9 @@
 //! Augmented copies of the anchor tables (`field.csv`, …) with columns the
 //! packaged graph derives from other tables.
 //!
+//! Every copy upper-cases the main-area columns (see
+//! [`super::upper_main_areas`]).
+//!
 //! `Field` carries its latest `FieldReserves` version (`fldRecoverable…`,
 //! `fldRemaining…`, `fldInplace…`, `fldReservesDate`, `fldReservesVersion`)
 //! and `fldProducedOE`, the sum of its monthly net oil-equivalent production
@@ -42,9 +45,32 @@ fn read_source(csv_dir: &Path, stem: &str) -> Result<Option<Table>> {
     }
 }
 
+/// A source table with its main areas upper-cased.
+fn cased(csv_dir: &Path, stem: &str) -> Result<Table> {
+    let mut table = Table::read(&csv_dir.join(format!("{stem}.csv")))?;
+    super::upper_main_areas(&table.headers, &mut table.rows);
+    Ok(table)
+}
+
+pub(super) fn licence(csv_dir: &Path, _: &mut DerivedReport) -> Result<Table> {
+    cased(csv_dir, "licence")
+}
+
+pub(super) fn licence_task(csv_dir: &Path, _: &mut DerivedReport) -> Result<Table> {
+    cased(csv_dir, "licence_task")
+}
+
+pub(super) fn discovery(csv_dir: &Path, _: &mut DerivedReport) -> Result<Table> {
+    cased(csv_dir, "discovery")
+}
+
+pub(super) fn block(csv_dir: &Path, _: &mut DerivedReport) -> Result<Table> {
+    cased(csv_dir, "block")
+}
+
 /// `field.csv` plus the latest-reserves snapshot and `fldProducedOE`.
 pub(super) fn field(csv_dir: &Path, report: &mut DerivedReport) -> Result<Table> {
-    let mut fields = Table::read(&csv_dir.join("field.csv"))?;
+    let mut fields = cased(csv_dir, "field")?;
     let key = fields.getter(FIELD_KEY);
     let ids: Vec<String> = fields.rows.iter().map(|r| key.get(r).to_string()).collect();
 

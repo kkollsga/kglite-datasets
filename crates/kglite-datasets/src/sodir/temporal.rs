@@ -21,7 +21,9 @@
 //!   sums to 100 %, and the rule would have emptied 503 licence, field, TUF
 //!   and business-arrangement days.
 //!
-//! The source CSVs are never modified. Bounds are compared as kglite reads
+//! The copies upper-case the main-area columns, as every derived copy does
+//! (`crate::sodir::derived::upper_main_areas`). The source CSVs are never
+//! modified. Bounds are compared as kglite reads
 //! them: `YYYY-MM-DD` (a time after it is ignored), eight digits as
 //! `YYYYMMDD`, or epoch milliseconds of nine digits or more, negative before
 //! 1970; anything else is treated as missing, which kglite reads as an open
@@ -242,7 +244,8 @@ pub fn apply(csv_dir: &Path, targets: &[&str]) -> Result<TemporalReport> {
             continue;
         }
         let (headers, rows) = read_csv(&source)?;
-        let kept = filter_table(table, &headers, &rows, &mut report, &mut rejects);
+        let mut kept = filter_table(table, &headers, &rows, &mut report, &mut rejects);
+        crate::sodir::derived::upper_main_areas(&headers, &mut kept);
         write_csv(&derived, &headers, &kept)?;
         report.tables += 1;
         report.kept += kept.len();

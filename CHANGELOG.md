@@ -24,9 +24,17 @@ semantic versioning (workspace version in the root `Cargo.toml`).
   get a new negative id: Mjølnir Impact Crater (published under 24, which
   Bjarmeland Platform keeps) and the three Barents Sea elements published
   under 0. `STRUCTID_SOURCE` keeps the published id. 253 nodes (was 263 rows).
-- **Behaviour change:** the `Wellbore`, `Field` and `StructuralElement`
-  nodes read copies the refresh writes (`csv/_derived_wellbore.csv`,
-  `csv/_derived_field.csv`, `csv/_derived_structural_elements.csv`). A complement that overrides their
+- **Behaviour change:** main-area values are upper case on every type, as
+  `wlbMainArea` already was: `fldMainArea`, `prlMainArea` (`Licence`,
+  `LicenceTask`), `nmaName` (`Discovery`, `DiscoveryPoly`) and
+  `blcMainArea` (`Block`). Sodir's 2026 export writes `North sea` on some
+  tables and `NORTH SEA` or `Barents Sea` on others, so an area filter
+  matched one type only. **Do:** filter on `'NORTH SEA'`,
+  `'NORWEGIAN SEA'`, `'BARENTS SEA'`. `Discovery.nmaName` is no longer
+  skipped.
+- **Behaviour change:** the `Wellbore`, `Field`, `Discovery`, `Licence`,
+  `LicenceTask`, `Block` and `StructuralElement` nodes read copies the
+  refresh writes (`csv/_derived_<stem>.csv`). A complement that overrides their
   `csv` replaces the copy and loses the derived columns.
 
 ### Added
