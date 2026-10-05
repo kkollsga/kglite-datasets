@@ -15,6 +15,7 @@
 //!   ├── orchestrator  refresh + fetch_all — drives index/client/fetch  [A4]
 //!   ├── blueprint     blueprint walk + deep-merge                       [A4]
 //!   ├── preprocess    the 4 FK-derivation joins                         [A3]
+//!   ├── temporal      valid-time filtered copies + rejects log
 //!   ├── index         sodir_index.json + two-tier cooldown              [A3]
 //!   ├── fetch         paginate ArcGIS GeoJSON → CSV                     [A2]
 //!   ├── client        ArcGIS REST client (rate limit + retry)           [A2]
@@ -37,6 +38,7 @@ pub mod layout;
 pub mod orchestrator;
 pub mod play_examples;
 pub mod preprocess;
+pub mod temporal;
 pub mod volume;
 
 pub use blueprint::{datasets_used_by_blueprint, merge_blueprint_json};

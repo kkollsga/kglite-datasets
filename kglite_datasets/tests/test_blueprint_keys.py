@@ -141,3 +141,86 @@ def test_the_gate_can_fail() -> None:
     assert any("'lables'" in f for f in found)
     assert any("fk_edge 'IN_BLOCK'" in f and "'note'" in f for f in found)
     assert any("sub_node 'FieldReserves'" in f and "'spatial_only'" in f for f in found)
+
+
+ACCEPTED_TEMPORAL_KEYS = frozenset({"from", "to", "convention", "empty_when"})
+
+
+def _specs(spec: dict, where: str):
+    """Every node, sub-node, FK-edge and junction spec, with where it sits."""
+    yield where, spec, "node"
+    connections = spec.get("connections") or {}
+    for edge_type, edge in (connections.get("fk_edges") or {}).items():
+        yield f"{where} fk_edge {edge_type!r}", edge, "fk_edge"
+    for edge_type, edge in (connections.get("junction_edges") or {}).items():
+        yield f"{where} junction_edge {edge_type!r}", edge, "junction"
+    for sub_type, sub in (spec.get("sub_nodes") or {}).items():
+        yield from _specs(sub, f"{where} sub_node {sub_type!r}")
+
+
+def _temporal_defects(where: str, spec: dict, kind: str) -> list[str]:
+    """A ``temporal`` key kglite would reject or ignore, or a validity typing
+    that declares nothing.
+
+    Since kglite 0.19.0, ``validFrom``/``validTo`` in ``properties`` or
+    ``property_types`` only type the column as a date: the type declares no
+    interval, so every version reads as current. The packaged Sodir blueprint
+    shipped 48 such columns and was time-blind on 0.19.x until 0.1.25.
+    """
+    types = spec.get("property_types") or {}
+    if kind != "junction" and isinstance(spec.get("properties"), dict):
+        types = {**spec["properties"], **types}
+    bad = [
+        f"{where}: {col!r} typed {t!r} declares nothing" for col, t in types.items() if t in ("validFrom", "validTo")
+    ]
+    temporal = spec.get("temporal")
+    if temporal is None:
+        return bad
+    bad += _unknown(f"{where} temporal", temporal, ACCEPTED_TEMPORAL_KEYS)
+    if temporal.get("convention") not in ("closed", "half_open"):
+        bad.append(f"{where}: temporal without a convention declares nothing")
+    if temporal.get("empty_when") not in (None, "to_before_from") or (
+        "empty_when" in temporal and temporal.get("convention") != "closed"
+    ):
+        bad.append(f"{where}: empty_when is only 'to_before_from' under 'closed'")
+    stored = set(types) | set(spec.get("properties") or [])
+    stored = {(spec.get("rename") or {}).get(c, c) for c in stored}
+    for bound in ("from", "to"):
+        if temporal.get(bound) not in stored:
+            bad.append(f"{where}: temporal {bound} {temporal.get(bound)!r} is not a stored property")
+    return bad
+
+
+@pytest.mark.parametrize("path", SHIPPED_BLUEPRINTS, ids=lambda p: p.parent.name)
+def test_shipped_blueprint_validity_is_declared(path: Path) -> None:
+    blueprint = json.loads(path.read_text(encoding="utf-8"))
+    bad = []
+    for node_type, spec in (blueprint.get("nodes") or {}).items():
+        for where, s, kind in _specs(spec, f"node {node_type!r}"):
+            bad += _temporal_defects(where, s, kind)
+    assert not bad, "\n  ".join(["validity the built graph would not apply:", *bad])
+
+
+def test_the_validity_gate_can_fail() -> None:
+    spec = {
+        "properties": {"a": "validFrom", "b": "date"},
+        "connections": {
+            "junction_edges": {
+                "HAS_X": {
+                    "properties": ["f", "t"],
+                    "property_types": {"f": "date", "t": "date"},
+                    "temporal": {
+                        "from": "f",
+                        "to": "missing",
+                        "convention": "half_open",
+                        "empty_when": "to_before_from",
+                    },
+                }
+            }
+        },
+    }
+    found = [d for where, s, kind in _specs(spec, "node 'N'") for d in _temporal_defects(where, s, kind)]
+    assert len(found) == 3, found
+    assert any("'a' typed 'validFrom'" in f for f in found)
+    assert any("empty_when" in f for f in found)
+    assert any("'missing' is not a stored property" in f for f in found)

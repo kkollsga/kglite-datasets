@@ -38,6 +38,44 @@ workdir/
 The loader derives foreign-key relationships during a `preprocess` join pass and
 converts ArcGIS geometry to WKT before the graph build.
 
+## Valid time
+
+The packaged graph declares Sodir's history tables as validity intervals.
+A query with no `FOR VALID_TIME` prefix reads the state as of today.
+
+```python
+g.cypher("MATCH (l:Licence)-[r:HAS_LICENSEE]->(c) RETURN c.title, r.prlLicenseeInterest")  # today
+g.cypher("MATCH (l:Licence)-[r:HAS_LICENSEE]->(c) RETURN c.title", valid_at="2015-06-30")
+g.cypher("FOR VALID_TIME ALL MATCH (l:Licence)-[r:HAS_LICENSEE]->(c) RETURN c.title")    # every version
+g.set_valid_time_default("all")  # this session reads history by default
+```
+
+Declared types use Sodir's `closed` convention: the `…To` day is the last
+valid day.
+
+| Kind | Declared |
+|---|---|
+| Relationships, per source type | `HAS_LICENSEE` from `Field`, `Licence`, `BusinessArrangement`; `HAS_OPERATOR` from `Field`, `Discovery`, `Licence`, `TUF`, `BusinessArrangement`; `HAS_OWNER` from `TUF`; `INCLUDES_DISCOVERY` from `Field` |
+| Nodes | `FieldStatusHistory`, `FieldOwnerHistory`, `DiscoveryPoly`, `LicencePhase`, `LicenceAreaPoly`, `TUF`, `SeismicFishery`, `BusinessArrangement`, `BusinessArrangementHistory`, `AfexArea`, `AfexAreaHistory`, `PetregLicence` |
+
+Rules that follow from the source:
+
+- Undated links stay unfiltered: `Discovery` and `PetregLicence` licensees,
+  `PetregLicence` operators. Sodir publishes no dates for them.
+- A relationship is hidden while its declared endpoint is not valid. A `TUF`
+  that ended hides its owners, even when their rows are still open.
+- A version superseded the day it was registered (`to` is the day before
+  `from`) is kept as an empty interval, valid on no day.
+- A one-day version (`from` equals `to`) is valid on that day.
+- A row whose `to` lies more than one day before its `from` is a data error.
+  kglite cannot declare it, so it is left out of the graph and listed in
+  `workdir/csv/_derived_temporal_rejects.csv` with its source record
+  (geometry columns left out).
+  The cached source CSV keeps the row.
+
+Seismic plan and weekly windows (`seaPlanFromDate`, `seaWeekly…`) are activity
+dates, not validity, and are plain `date` properties.
+
 ## Play assignments
 
 The packaged enhancement assigns every matching `Discovery IN_PLAY`

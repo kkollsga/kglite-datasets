@@ -17,7 +17,7 @@ use pyo3::types::{PyDict, PyModule};
 use pyo3::wrap_pyfunction;
 
 use kglite_datasets::sodir::{
-    datasets_used_by_blueprint, fetch_all_with_enhancement, SodirError, Workdir,
+    datasets_used_by_blueprint, fetch_all_with_enhancement, temporal, SodirError, Workdir,
 };
 
 fn map_err(e: SodirError) -> PyErr {
@@ -135,6 +135,10 @@ fn refresh(
         "discovery_volume_null",
         report.preprocess.discovery_volume.null,
     )?;
+    let t = &report.preprocess.temporal;
+    pp.set_item("temporal_tables", t.tables)?;
+    pp.set_item("temporal_empty_kept", t.empty_kept)?;
+    pp.set_item("temporal_inverted_dropped", t.inverted_dropped)?;
     d.set_item("preprocess", pp)?;
 
     Ok(d.into())
@@ -161,11 +165,21 @@ fn merge_blueprint(
     .map_err(PyRuntimeError::new_err)
 }
 
-/// The dataset stems a blueprint references (CSV filename stems).
+/// The dataset stems a blueprint references (CSV filename stems), with a
+/// valid-time copy (`_derived_temporal_<stem>`) reported as its source.
 #[pyfunction]
 fn datasets_for_blueprint(blueprint_json: String) -> PyResult<Vec<String>> {
     let bp = parse_json(&blueprint_json, "blueprint")?;
-    Ok(datasets_used_by_blueprint(&bp))
+    let mut stems: Vec<String> = datasets_used_by_blueprint(&bp)
+        .into_iter()
+        .map(|stem| match temporal::source_for_derived(&stem) {
+            Some(source) => source.to_string(),
+            None => stem,
+        })
+        .collect();
+    stems.sort();
+    stems.dedup();
+    Ok(stems)
 }
 
 /// Path to the workdir's `graph/` directory.

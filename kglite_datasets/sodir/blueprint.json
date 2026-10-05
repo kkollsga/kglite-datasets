@@ -1,4 +1,7 @@
 {
+  "settings": {
+    "valid_time_default": "today"
+  },
   "nodes": {
     "Field": {
       "csv": "csv/field.csv",
@@ -42,7 +45,7 @@
         },
         "junction_edges": {
           "HAS_LICENSEE": {
-            "csv": "csv/field_licensee_hst.csv",
+            "csv": "csv/_derived_temporal_field_licensee_hst.csv",
             "source_fk": "fldNpdidField",
             "target": "Company",
             "target_fk": "cmpNpdidCompany",
@@ -53,12 +56,18 @@
               "fldSdfiShare"
             ],
             "property_types": {
-              "fldLicenseeFrom": "validFrom",
-              "fldLicenseeTo": "validTo"
+              "fldLicenseeFrom": "date",
+              "fldLicenseeTo": "date"
+            },
+            "temporal": {
+              "from": "fldLicenseeFrom",
+              "to": "fldLicenseeTo",
+              "convention": "closed",
+              "empty_when": "to_before_from"
             }
           },
           "HAS_OPERATOR": {
-            "csv": "csv/field_operator_hst.csv",
+            "csv": "csv/_derived_temporal_field_operator_hst.csv",
             "source_fk": "fldNpdidField",
             "target": "Company",
             "target_fk": "cmpNpdidCompany",
@@ -67,12 +76,18 @@
               "fldOperatorTo"
             ],
             "property_types": {
-              "fldOperatorFrom": "validFrom",
-              "fldOperatorTo": "validTo"
+              "fldOperatorFrom": "date",
+              "fldOperatorTo": "date"
+            },
+            "temporal": {
+              "from": "fldOperatorFrom",
+              "to": "fldOperatorTo",
+              "convention": "closed",
+              "empty_when": "to_before_from"
             }
           },
           "INCLUDES_DISCOVERY": {
-            "csv": "csv/field_discoveries_incl_hst.csv",
+            "csv": "csv/_derived_temporal_field_discoveries_incl_hst.csv",
             "source_fk": "fldNpdidField",
             "target": "Discovery",
             "target_fk": "dscNpdidDiscovery",
@@ -81,8 +96,14 @@
               "fldDiscoveryInclToDate"
             ],
             "property_types": {
-              "fldDiscoveryInclFromDate": "validFrom",
-              "fldDiscoveryInclToDate": "validTo"
+              "fldDiscoveryInclFromDate": "date",
+              "fldDiscoveryInclToDate": "date"
+            },
+            "temporal": {
+              "from": "fldDiscoveryInclFromDate",
+              "to": "fldDiscoveryInclToDate",
+              "convention": "closed",
+              "empty_when": "to_before_from"
             }
           },
           "IN_PLAY": {
@@ -192,13 +213,13 @@
           }
         },
         "FieldStatusHistory": {
-          "csv": "csv/field_activity_status_hst.csv",
+          "csv": "csv/_derived_temporal_field_activity_status_hst.csv",
           "pk": "auto",
           "title": "fldStatus",
           "parent_fk": "fldNpdidField",
           "properties": {
-            "fldStatusFromDate": "validFrom",
-            "fldStatusToDate": "validTo",
+            "fldStatusFromDate": "date",
+            "fldStatusToDate": "date",
             "fldStatusDateUpdated": "date"
           },
           "skipped": [
@@ -213,6 +234,12 @@
                 "fk": "fldNpdidField"
               }
             }
+          },
+          "temporal": {
+            "from": "fldStatusFromDate",
+            "to": "fldStatusToDate",
+            "convention": "closed",
+            "empty_when": "to_before_from"
           }
         },
         "FieldInvestment": {
@@ -263,7 +290,7 @@
           }
         },
         "FieldOwnerHistory": {
-          "csv": "csv/field_owner_hst.csv",
+          "csv": "csv/_derived_temporal_field_owner_hst.csv",
           "pk": "auto",
           "title": "fldOwnerName",
           "parent_fk": "fldNpdidField",
@@ -271,8 +298,8 @@
             "fldNpdidOwner": "int",
             "fldName": "string",
             "fldOwnerKind": "string",
-            "fldOwnershipFromDate": "validFrom",
-            "fldOwnershipToDate": "validTo",
+            "fldOwnershipFromDate": "date",
+            "fldOwnershipToDate": "date",
             "fldOwnerDateUpdated": "date"
           },
           "skipped": [
@@ -287,6 +314,12 @@
                 "fk": "fldNpdidField"
               }
             }
+          },
+          "temporal": {
+            "from": "fldOwnershipFromDate",
+            "to": "fldOwnershipToDate",
+            "convention": "closed",
+            "empty_when": "to_before_from"
           }
         },
         "ProductionProfile": {
@@ -1060,7 +1093,7 @@
             "properties": []
           },
           "HAS_OPERATOR": {
-            "csv": "csv/discovery_operator_hst.csv",
+            "csv": "csv/_derived_temporal_discovery_operator_hst.csv",
             "source_fk": "dscNpdidDiscovery",
             "target": "Company",
             "target_fk": "cmpNpdidCompany",
@@ -1069,8 +1102,14 @@
               "dscOperatorTo"
             ],
             "property_types": {
-              "dscOperatorFrom": "validFrom",
-              "dscOperatorTo": "validTo"
+              "dscOperatorFrom": "date",
+              "dscOperatorTo": "date"
+            },
+            "temporal": {
+              "from": "dscOperatorFrom",
+              "to": "dscOperatorTo",
+              "convention": "closed",
+              "empty_when": "to_before_from"
             }
           },
           "CANDIDATE_PLAY": {
@@ -1156,7 +1195,7 @@
           }
         },
         "DiscoveryPoly": {
-          "csv": "csv/discovery_poly_hst.csv",
+          "csv": "csv/_derived_temporal_discovery_poly_hst.csv",
           "pk": "auto",
           "title": "dscName",
           "parent_fk": "dscNpdidDiscovery",
@@ -1164,8 +1203,8 @@
             "dscCurrentActivityStatus": "string",
             "dscDateFromInclInField": "date",
             "dscDateUpdated": "date",
-            "dscDateValidFrom": "validFrom",
-            "dscDateValidTo": "validTo",
+            "dscDateValidFrom": "date",
+            "dscDateValidTo": "date",
             "wlbName": "string",
             "dscDiscoveryYear": "int",
             "fldName": "string",
@@ -1205,6 +1244,12 @@
                 "fk": "dscNpdidDiscovery"
               }
             }
+          },
+          "temporal": {
+            "from": "dscDateValidFrom",
+            "to": "dscDateValidTo",
+            "convention": "closed",
+            "empty_when": "to_before_from"
           }
         },
         "DiscoveryMapRef": {
@@ -1357,7 +1402,7 @@
         },
         "junction_edges": {
           "HAS_LICENSEE": {
-            "csv": "csv/licence_licensee_hst.csv",
+            "csv": "csv/_derived_temporal_licence_licensee_hst.csv",
             "source_fk": "prlNpdidLicence",
             "target": "Company",
             "target_fk": "cmpNpdidCompany",
@@ -1367,12 +1412,18 @@
               "prlLicenseeDateValidTo"
             ],
             "property_types": {
-              "prlLicenseeDateValidFrom": "validFrom",
-              "prlLicenseeDateValidTo": "validTo"
+              "prlLicenseeDateValidFrom": "date",
+              "prlLicenseeDateValidTo": "date"
+            },
+            "temporal": {
+              "from": "prlLicenseeDateValidFrom",
+              "to": "prlLicenseeDateValidTo",
+              "convention": "closed",
+              "empty_when": "to_before_from"
             }
           },
           "HAS_OPERATOR": {
-            "csv": "csv/licence_operator_hst.csv",
+            "csv": "csv/_derived_temporal_licence_operator_hst.csv",
             "source_fk": "prlNpdidLicence",
             "target": "Company",
             "target_fk": "cmpNpdidCompany",
@@ -1381,8 +1432,14 @@
               "prlOperDateValidTo"
             ],
             "property_types": {
-              "prlOperDateValidFrom": "validFrom",
-              "prlOperDateValidTo": "validTo"
+              "prlOperDateValidFrom": "date",
+              "prlOperDateValidTo": "date"
+            },
+            "temporal": {
+              "from": "prlOperDateValidFrom",
+              "to": "prlOperDateValidTo",
+              "convention": "closed",
+              "empty_when": "to_before_from"
             }
           },
           "LICENCE_TRANSFER": {
@@ -1406,7 +1463,7 @@
       },
       "sub_nodes": {
         "LicencePhase": {
-          "csv": "csv/licence_phase_hst.csv",
+          "csv": "csv/_derived_temporal_licence_phase_hst.csv",
           "pk": "auto",
           "title": "prlPhase",
           "parent_fk": "prlNpdidLicence",
@@ -1416,8 +1473,8 @@
             "prlDateGranted": "date",
             "prlDateValidTo": "date",
             "prlDateInitialPeriodExpires": "date",
-            "prlDatePhaseValidFrom": "validFrom",
-            "prlDatePhaseValidTo": "validTo",
+            "prlDatePhaseValidFrom": "date",
+            "prlDatePhaseValidTo": "date",
             "prlPhaseDateUpdated": "date"
           },
           "skipped": [
@@ -1432,6 +1489,12 @@
                 "fk": "prlNpdidLicence"
               }
             }
+          },
+          "temporal": {
+            "from": "prlDatePhaseValidFrom",
+            "to": "prlDatePhaseValidTo",
+            "convention": "closed",
+            "empty_when": "to_before_from"
           }
         },
         "LicenceDocument": {
@@ -1484,14 +1547,14 @@
           }
         },
         "LicenceAreaPoly": {
-          "csv": "csv/licence_area_poly_hst.csv",
+          "csv": "csv/_derived_temporal_licence_area_poly_hst.csv",
           "pk": "auto",
           "title": "prlName",
           "parent_fk": "prlNpdidLicence",
           "properties": {
             "prlAreaPolyStratigraphical": "string",
-            "prlAreaPolyDateValidFrom": "validFrom",
-            "prlAreaPolyDateValidTo": "validTo",
+            "prlAreaPolyDateValidFrom": "date",
+            "prlAreaPolyDateValidTo": "date",
             "prlAreaPolyNationCode": "string",
             "prlAreaPolyBlockName": "string",
             "prlAreaPolyPolyNo": "int",
@@ -1521,6 +1584,12 @@
                 "fk": "prlNpdidLicence"
               }
             }
+          },
+          "temporal": {
+            "from": "prlAreaPolyDateValidFrom",
+            "to": "prlAreaPolyDateValidTo",
+            "convention": "closed",
+            "empty_when": "to_before_from"
           }
         },
         "LicenceDocumentArea": {
@@ -1968,14 +2037,14 @@
       "sub_nodes": {}
     },
     "TUF": {
-      "csv": "csv/tuf.csv",
+      "csv": "csv/_derived_temporal_tuf.csv",
       "pk": "tufNpdidTuf",
       "title": "tufName",
       "properties": {
         "tufKind": "string",
         "tufStatus": "string",
-        "tufDateValidFrom": "validFrom",
-        "tufDateValidTo": "validTo",
+        "tufDateValidFrom": "date",
+        "tufDateValidTo": "date",
         "tufStartPoint": "string",
         "tufEndPoint": "string"
       },
@@ -1987,7 +2056,7 @@
       "connections": {
         "junction_edges": {
           "HAS_OPERATOR": {
-            "csv": "csv/tuf_operator_hst.csv",
+            "csv": "csv/_derived_temporal_tuf_operator_hst.csv",
             "source_fk": "tufNpdidTuf",
             "target": "Company",
             "target_fk": "cmpNpdidCompany",
@@ -1996,12 +2065,18 @@
               "tufOperDateValidTo"
             ],
             "property_types": {
-              "tufOperDateValidFrom": "validFrom",
-              "tufOperDateValidTo": "validTo"
+              "tufOperDateValidFrom": "date",
+              "tufOperDateValidTo": "date"
+            },
+            "temporal": {
+              "from": "tufOperDateValidFrom",
+              "to": "tufOperDateValidTo",
+              "convention": "closed",
+              "empty_when": "to_before_from"
             }
           },
           "HAS_OWNER": {
-            "csv": "csv/tuf_owner_hst.csv",
+            "csv": "csv/_derived_temporal_tuf_owner_hst.csv",
             "source_fk": "tufNpdidTuf",
             "target": "Company",
             "target_fk": "cmpNpdidCompany",
@@ -2011,11 +2086,23 @@
               "tufOwnerDateValidTo"
             ],
             "property_types": {
-              "tufOwnerDateValidFrom": "validFrom",
-              "tufOwnerDateValidTo": "validTo"
+              "tufOwnerDateValidFrom": "date",
+              "tufOwnerDateValidTo": "date"
+            },
+            "temporal": {
+              "from": "tufOwnerDateValidFrom",
+              "to": "tufOwnerDateValidTo",
+              "convention": "closed",
+              "empty_when": "to_before_from"
             }
           }
         }
+      },
+      "temporal": {
+        "from": "tufDateValidFrom",
+        "to": "tufDateValidTo",
+        "convention": "closed",
+        "empty_when": "to_before_from"
       }
     },
     "LicensingActivity": {
@@ -2052,8 +2139,8 @@
         "seaSourceNumber": "float",
         "seaSourceSize": "float",
         "seaSourcePressure": "float",
-        "seaPlanFromDate": "validFrom",
-        "seaPlanToDate": "validTo",
+        "seaPlanFromDate": "date",
+        "seaPlanToDate": "date",
         "seaPlanBoatKm": "float",
         "seaDateStarting": "date",
         "seaDateFinalized": "date",
@@ -2238,15 +2325,15 @@
           }
         },
         "SeismicFishery": {
-          "csv": "csv/seismic_acquisition_fishery.csv",
+          "csv": "csv/_derived_temporal_seismic_acquisition_fishery.csv",
           "pk": "auto",
           "title": "seaSurveyName",
           "parent_fk": "seaNpdidSurvey",
           "properties": {
             "seaFisheryExpertName": "string",
             "seaFisheryExpertPhoneNumber": "string",
-            "seaFisheryExpertFromDate": "validFrom",
-            "seaFisheryExpertToDate": "validTo"
+            "seaFisheryExpertFromDate": "date",
+            "seaFisheryExpertToDate": "date"
           },
           "skipped": [
             "OBJECTID",
@@ -2260,6 +2347,12 @@
                 "fk": "seaNpdidSurvey"
               }
             }
+          },
+          "temporal": {
+            "from": "seaFisheryExpertFromDate",
+            "to": "seaFisheryExpertToDate",
+            "convention": "closed",
+            "empty_when": "to_before_from"
           }
         },
         "SeismicWeeklyDone": {
@@ -2268,8 +2361,8 @@
           "title": "seaSurveyName",
           "parent_fk": "seaNpdidSurvey",
           "properties": {
-            "seaWeeklyDoneFromDate": "validFrom",
-            "seaWeeklyDoneToDate": "validTo",
+            "seaWeeklyDoneFromDate": "date",
+            "seaWeeklyDoneToDate": "date",
             "seaWeeklyDonePolygonNumber": "float",
             "seaWeeklyDoneComments": "string",
             "seaWeeklyDoneCdpKm": "float",
@@ -2296,8 +2389,8 @@
           "title": "seaSurveyName",
           "parent_fk": "seaNpdidSurvey",
           "properties": {
-            "seaWeeklyPlannedFromDate": "validFrom",
-            "seaWeeklyPlannedToDate": "validTo",
+            "seaWeeklyPlannedFromDate": "date",
+            "seaWeeklyPlannedToDate": "date",
             "seaWeeklyPlannedPolygonNumber": "float",
             "seaWeeklyPlannedComments": "string",
             "seaWeeklyPlannedCdpKm": "float",
@@ -2348,14 +2441,14 @@
       }
     },
     "BusinessArrangement": {
-      "csv": "csv/business_arrangement_area.csv",
+      "csv": "csv/_derived_temporal_business_arrangement_area.csv",
       "pk": "baaNpdidBsnsArrArea",
       "title": "baaName",
       "properties": {
         "baaKind": "string",
         "baaDateApproved": "date",
-        "baaDateValidFrom": "validFrom",
-        "baaDateValidTo": "validTo",
+        "baaDateValidFrom": "date",
+        "baaDateValidTo": "date",
         "baaActive": "bool",
         "baaPublishOnInternet": "bool",
         "baaDateUpdated": "date",
@@ -2379,7 +2472,7 @@
       "connections": {
         "junction_edges": {
           "HAS_LICENSEE": {
-            "csv": "csv/business_arrangement_licensee_hst.csv",
+            "csv": "csv/_derived_temporal_business_arrangement_licensee_hst.csv",
             "source_fk": "baaNpdidBsnsArrArea",
             "target": "Company",
             "target_fk": "cmpNpdidCompany",
@@ -2389,16 +2482,35 @@
               "baaLicenseeDateValidTo"
             ],
             "property_types": {
-              "baaLicenseeDateValidFrom": "validFrom",
-              "baaLicenseeDateValidTo": "validTo"
+              "baaLicenseeDateValidFrom": "date",
+              "baaLicenseeDateValidTo": "date"
+            },
+            "temporal": {
+              "from": "baaLicenseeDateValidFrom",
+              "to": "baaLicenseeDateValidTo",
+              "convention": "closed",
+              "empty_when": "to_before_from"
             }
           },
           "HAS_OPERATOR": {
-            "csv": "csv/business_arrangement_operator.csv",
+            "csv": "csv/_derived_temporal_business_arrangement_operator.csv",
             "source_fk": "baaNpdidBsnsArrArea",
             "target": "Company",
             "target_fk": "cmpNpdidCompany",
-            "properties": []
+            "properties": [
+              "baaOperatorDateValidFrom",
+              "baaOperatorDateValidTo"
+            ],
+            "property_types": {
+              "baaOperatorDateValidFrom": "date",
+              "baaOperatorDateValidTo": "date"
+            },
+            "temporal": {
+              "from": "baaOperatorDateValidFrom",
+              "to": "baaOperatorDateValidTo",
+              "convention": "closed",
+              "empty_when": "to_before_from"
+            }
           },
           "BA_TRANSFER": {
             "csv": "csv/business_arrangement_transfer_hst.csv",
@@ -2420,14 +2532,14 @@
       },
       "sub_nodes": {
         "BusinessArrangementHistory": {
-          "csv": "csv/business_arrangement_history.csv",
+          "csv": "csv/_derived_temporal_business_arrangement_history.csv",
           "pk": "auto",
           "title": "baaName",
           "parent_fk": "baaNpdidBsnsArrArea",
           "properties": {
             "baaKind": "string",
-            "baaAreaPolyDateValidFrom": "validFrom",
-            "baaAreaPolyDateValidTo": "validTo",
+            "baaAreaPolyDateValidFrom": "date",
+            "baaAreaPolyDateValidTo": "date",
             "prlName": "string",
             "baaAreaPolyNationCode2": "string",
             "baaAreaPolyBlockName": "string",
@@ -2456,8 +2568,20 @@
                 "fk": "baaNpdidBsnsArrArea"
               }
             }
+          },
+          "temporal": {
+            "from": "baaAreaPolyDateValidFrom",
+            "to": "baaAreaPolyDateValidTo",
+            "convention": "closed",
+            "empty_when": "to_before_from"
           }
         }
+      },
+      "temporal": {
+        "from": "baaDateValidFrom",
+        "to": "baaDateValidTo",
+        "convention": "closed",
+        "empty_when": "to_before_from"
       }
     },
     "StructuralElement": {
@@ -2496,14 +2620,14 @@
       "connections": {}
     },
     "AfexArea": {
-      "csv": "csv/afex_area.csv",
+      "csv": "csv/_derived_temporal_afex_area.csv",
       "pk": "afxNpdidAfexArea",
       "title": "afxName",
       "properties": {
         "afxKind": "string",
         "afxDateApproved": "date",
-        "afxDateValidFrom": "validFrom",
-        "afxDateValidTo": "validTo",
+        "afxDateValidFrom": "date",
+        "afxDateValidTo": "date",
         "afxActive": "bool",
         "afxPublishOnInternet": "bool",
         "afxDateUpdated": "date",
@@ -2534,14 +2658,14 @@
       },
       "sub_nodes": {
         "AfexAreaHistory": {
-          "csv": "csv/afex_area_history.csv",
+          "csv": "csv/_derived_temporal_afex_area_history.csv",
           "pk": "auto",
           "title": "afxName",
           "parent_fk": "afxNpdidAfexArea",
           "properties": {
             "afxKind": "string",
-            "afxAreaPolyDateValidFrom": "validFrom",
-            "afxAreaPolyDateValidTo": "validTo",
+            "afxAreaPolyDateValidFrom": "date",
+            "afxAreaPolyDateValidTo": "date",
             "prlName": "string",
             "afxAreaPolyNationCode2": "string",
             "blcName": "string",
@@ -2571,12 +2695,24 @@
                 "fk": "afxNpdidAfexArea"
               }
             }
+          },
+          "temporal": {
+            "from": "afxAreaPolyDateValidFrom",
+            "to": "afxAreaPolyDateValidTo",
+            "convention": "closed",
+            "empty_when": "to_before_from"
           }
         }
+      },
+      "temporal": {
+        "from": "afxDateValidFrom",
+        "to": "afxDateValidTo",
+        "convention": "closed",
+        "empty_when": "to_before_from"
       }
     },
     "PetregLicence": {
-      "csv": "csv/petreg_licence.csv",
+      "csv": "csv/_derived_temporal_petreg_licence.csv",
       "pk": "ptl_id",
       "title": "ptlName",
       "parent": "Licence",
@@ -2585,8 +2721,8 @@
         "ptlKind": "string",
         "ptlStatus": "string",
         "tufNpdidTuf": "int",
-        "ptlDateValidFrom": "validFrom",
-        "ptlDateValidTo": "validTo",
+        "ptlDateValidFrom": "date",
+        "ptlDateValidTo": "date",
         "ptlDateAwarded": "date",
         "prlName": "string",
         "tufName": "string",
@@ -2657,6 +2793,12 @@
             }
           }
         }
+      },
+      "temporal": {
+        "from": "ptlDateValidFrom",
+        "to": "ptlDateValidTo",
+        "convention": "closed",
+        "empty_when": "to_before_from"
       }
     },
     "SubArea": {

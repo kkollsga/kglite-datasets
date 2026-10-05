@@ -66,6 +66,14 @@ def open(  # noqa: A001
       complement for one call; ``complement_overrides=True`` flips the
       merge so the complement wins on collisions (default: base wins).
 
+    Valid time: the packaged blueprint declares Sodir's history tables, so a
+    query with no ``FOR VALID_TIME`` prefix reads the state as of today.
+    Prefix ``FOR VALID_TIME ALL`` (or pass ``valid_at="all"``) for every
+    version, or call ``set_valid_time_default("all")`` on the graph.
+    History rows kglite cannot declare are listed in
+    ``workdir/csv/_derived_temporal_rejects.csv``; build warnings are in
+    ``graph_info()["build"]``.
+
     :param workdir: directory holding cached CSVs + index + (disk mode)
         the built graph. Created if missing.
     :param storage: ``"memory"`` (default) or ``"disk"`` (persistent,
@@ -288,6 +296,14 @@ def _print_refresh_summary(report: dict) -> None:
         f"cached {len(report.get('cached', []))}, "
         f"unfetchable {len(report.get('unfetchable', []))}"
     )
+    pre = report.get("preprocess", {})
+    if pre.get("temporal_tables"):
+        print(
+            f"  Valid time: {pre['temporal_tables']} history tables, "
+            f"{pre['temporal_inverted_dropped']} inverted row(s) dropped "
+            f"(logged in csv/_derived_temporal_rejects.csv), "
+            f"{pre['temporal_empty_kept']} superseded-on-registration row(s) kept as empty"
+        )
     errors = report.get("errors", [])
     if errors:
         print(f"  ERRORS ({len(errors)}):")

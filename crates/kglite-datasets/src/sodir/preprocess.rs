@@ -26,6 +26,7 @@ pub struct PreprocessReport {
     pub announced_block_fk: Option<usize>,
     pub discovery_play: crate::sodir::enhance::EnhancementReport,
     pub discovery_volume: crate::sodir::volume::VolumeReport,
+    pub temporal: crate::sodir::temporal::TemporalReport,
 }
 
 /// Run every applicable FK-derivation step on the CSVs under `csv_dir`.
@@ -36,6 +37,17 @@ pub fn apply(csv_dir: &Path) -> Result<PreprocessReport> {
 pub fn apply_with_enhancement(
     csv_dir: &Path,
     enhance_discovery_play: bool,
+) -> Result<PreprocessReport> {
+    apply_with_temporal(csv_dir, enhance_discovery_play, &[])
+}
+
+/// [`apply_with_enhancement`], then write the valid-time filtered copy of
+/// each `temporal_targets` source stem (see [`crate::sodir::temporal`]). The
+/// copies are made last so they carry the FK columns the joins add.
+pub fn apply_with_temporal(
+    csv_dir: &Path,
+    enhance_discovery_play: bool,
+    temporal_targets: &[&str],
 ) -> Result<PreprocessReport> {
     let mut report = PreprocessReport::default();
 
@@ -57,6 +69,7 @@ pub fn apply_with_enhancement(
         report.discovery_play = crate::sodir::enhance::apply(csv_dir)?;
         report.discovery_volume = crate::sodir::volume::apply(csv_dir)?;
     }
+    report.temporal = crate::sodir::temporal::apply(csv_dir, temporal_targets)?;
 
     Ok(report)
 }
@@ -153,7 +166,7 @@ fn add_announced_block_fk(csv_dir: &Path) -> Result<usize> {
 
 /// Read a CSV fully into `(headers, rows)`. Rows shorter than the
 /// header are padded so index access is always in bounds.
-fn read_csv(path: &Path) -> Result<(Vec<String>, Vec<Vec<String>>)> {
+pub(crate) fn read_csv(path: &Path) -> Result<(Vec<String>, Vec<Vec<String>>)> {
     let mut rdr = csv::ReaderBuilder::new()
         .flexible(true)
         .from_path(path)
@@ -178,7 +191,7 @@ fn read_csv(path: &Path) -> Result<(Vec<String>, Vec<Vec<String>>)> {
 }
 
 /// Write `headers` + `rows` back to `path`.
-fn write_csv(path: &Path, headers: &[String], rows: &[Vec<String>]) -> Result<()> {
+pub(crate) fn write_csv(path: &Path, headers: &[String], rows: &[Vec<String>]) -> Result<()> {
     let mut wtr = csv::WriterBuilder::new()
         .quote_style(csv::QuoteStyle::Necessary)
         .from_path(path)

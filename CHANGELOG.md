@@ -6,8 +6,62 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 
 ## [Unreleased]
 
+### Breaking changes and migration
+
+- **Behaviour change:** a query with no `FOR VALID_TIME` prefix on the packaged
+  Sodir graph now reads the state as of today. It read every historical
+  version before: the blueprint typed 48 columns `validFrom` / `validTo`,
+  which declares nothing since kglite 0.19.0, so licensee, operator and owner
+  history all read as current. **Do:** prefix `FOR VALID_TIME ALL` (or pass
+  `valid_at="all"`) where a query means history, pass `valid_at="YYYY-MM-DD"`
+  for a past date, or call `set_valid_time_default("all")` on the graph. On
+  the April 2026 FactMaps snapshot, a query today sees 2,249 of 48,715 dated
+  `HAS_LICENSEE`, 1,360 of 7,772 dated `HAS_OPERATOR` and 180 of 11,028
+  `HAS_OWNER` relationships.
+- `degree()`, `indegree()`, `outdegree()` and `shortest_path_length()` are
+  refused under that default (kglite 0.19.2). **Do:** use `COUNT { (n)--() }`,
+  or prefix `FOR VALID_TIME ALL`.
+- The blueprint stores `settings.valid_time_default: "today"`, so a saved
+  `.kgl` carries it (`graph_info()['valid_time_default']`).
+
+### Added
+
+- Sodir valid time, `closed` convention (`…To` is the last valid day).
+  Relationships are declared per source type: `HAS_LICENSEE` from `Field`,
+  `Licence` and `BusinessArrangement`; `HAS_OPERATOR` from `Field`,
+  `Discovery`, `Licence`, `TUF` and `BusinessArrangement`; `HAS_OWNER` from
+  `TUF`; `INCLUDES_DISCOVERY` from `Field`. Twelve node types are declared:
+  `FieldStatusHistory`, `FieldOwnerHistory`, `DiscoveryPoly`, `LicencePhase`,
+  `LicenceAreaPoly`, `TUF`, `SeismicFishery`, `BusinessArrangement`,
+  `BusinessArrangementHistory`, `AfexArea`, `AfexAreaHistory` and
+  `PetregLicence`. Undated links (`Discovery` and `PetregLicence` licensees,
+  `PetregLicence` operators) stay unfiltered.
+- `BusinessArrangement` `HAS_OPERATOR` relationships carry
+  `baaOperatorDateValidFrom` / `baaOperatorDateValidTo`; the blueprint dropped
+  both columns before.
+- A history row whose `to` lies more than one day before its `from` is left
+  out of the graph and logged, with its source record, to
+  `workdir/csv/_derived_temporal_rejects.csv` (24 rows on the April 2026
+  snapshot: 20 discovery operators, 3 licence licensees, 1 field status).
+  kglite refuses such a row, so one would fail the build. The cached source
+  CSV is untouched; the build reads `csv/_derived_temporal_<stem>.csv`. A row
+  superseded the day it was registered (`to` is the day before `from`, 18
+  discovery operator rows) is kept as an empty interval, valid on no day.
+  One-day versions (`from` equals `to`) are kept: every such day sums licence,
+  field, TUF and business-arrangement shares to 100 %.
+- `fetch_all` / `open(verbose=True)` report the counts, and the refresh report
+  gains `temporal_tables`, `temporal_inverted_dropped` and
+  `temporal_empty_kept` under `preprocess`. Rust:
+  `kglite_datasets::sodir::temporal`, `preprocess::apply_with_temporal`, and a
+  `temporal` field on `PreprocessReport` (struct literals of it break).
+- A shipped-blueprint test fails on any column typed `validFrom` / `validTo`
+  and on a `temporal` key kglite would ignore.
+
 ### Changed
 
+- Seismic plan and weekly windows (`seaPlanFromDate` / `seaPlanToDate`,
+  `seaWeekly…FromDate` / `…ToDate`) are typed `date`. They are activity
+  dates, not validity.
 - Raised the Python runtime, development, and CI floor from `kglite>=0.19.1`
   to `kglite>=0.19.3`, keeping both CI matrix legs on the declared range, and
   refreshed the `docs/migration.md` Cargo example. The shipped blueprints are

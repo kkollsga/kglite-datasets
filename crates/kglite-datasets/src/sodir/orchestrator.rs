@@ -24,6 +24,7 @@ use crate::sodir::fetch;
 use crate::sodir::index::{self, Action, DatasetEntry, SodirIndex};
 use crate::sodir::layout::Workdir;
 use crate::sodir::preprocess::{self, PreprocessReport};
+use crate::sodir::temporal;
 
 /// Outcome of a CSV refresh pass — every needed stem lands in exactly
 /// one bucket.
@@ -285,29 +286,63 @@ pub fn fetch_all_with_enhancement(
     enhance_discovery_play: bool,
 ) -> Result<FetchAllReport> {
     workdir.ensure_dirs()?;
+    let (fetch, temporal_targets) = split_temporal(needed);
     let client = ArcGISClient::new()?;
     let mut index = index::load(workdir)?;
     let refresh = refresh_csvs(
         workdir,
         &client,
-        needed,
+        &fetch,
         &mut index,
         index_cooldown_days,
         dataset_cooldown_days,
         concurrency,
     )?;
     index::save(workdir, &index)?;
-    let preprocess =
-        preprocess::apply_with_enhancement(&workdir.csv_dir(), enhance_discovery_play)?;
+    let preprocess = preprocess::apply_with_temporal(
+        &workdir.csv_dir(),
+        enhance_discovery_play,
+        &temporal_targets,
+    )?;
     Ok(FetchAllReport {
         refresh,
         preprocess,
     })
 }
 
+/// Replace each valid-time copy a blueprint reads
+/// (`_derived_temporal_<stem>`) by its source stem, which is what gets
+/// fetched; the sources form the second list, for the copy step.
+fn split_temporal(needed: &[String]) -> (Vec<String>, Vec<&'static str>) {
+    let mut fetch = Vec::with_capacity(needed.len());
+    let mut targets = Vec::new();
+    for stem in needed {
+        match temporal::source_for_derived(stem) {
+            Some(source) => {
+                fetch.push(source.to_string());
+                targets.push(source);
+            }
+            None => fetch.push(stem.clone()),
+        }
+    }
+    (fetch, targets)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn temporal_copies_fetch_their_sources() {
+        let needed = vec![
+            "_derived_temporal_tuf".to_string(),
+            "field".to_string(),
+            "_derived_discovery_play".to_string(),
+        ];
+        let (fetch, targets) = split_temporal(&needed);
+        assert_eq!(fetch, ["tuf", "field", "_derived_discovery_play"]);
+        assert_eq!(targets, ["tuf"]);
+    }
 
     #[test]
     fn size_hint_uses_prior_row_count() {
