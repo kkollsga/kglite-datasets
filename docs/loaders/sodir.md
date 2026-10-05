@@ -80,6 +80,32 @@ Rules that follow from the source:
 Seismic plan and weekly windows (`seaPlanFromDate`, `seaWeekly…`) are activity
 dates, not validity, and are plain `date` properties.
 
+## Lifecycle windows
+
+`Wellbore`, `Licence`, `Field`, `Discovery` and `SeismicSurvey` carry
+`existsFrom` / `existsTo` as plain `date` properties. They are not declared
+valid time, so an undated query still sees every node. `existsTo` is the
+first day the entity no longer exists; empty means it still exists.
+
+```python
+g.cypher("MATCH (l:Licence) WHERE l.existsFrom <= date('2015-06-30') "
+         "AND (l.existsTo IS NULL OR l.existsTo > date('2015-06-30')) RETURN count(l)")
+```
+
+| Type | `existsFrom` | `existsTo` |
+|---|---|---|
+| Wellbore | its first status period | open |
+| Licence | `prlDateGranted` | the day after `prlDateValidTo` |
+| Field | earliest status, licensee, operator, owner or included-discovery date; else 1 January of the discovery year | open |
+| Discovery | completion of the discovery wellbore if in the discovery year, else 1 January of the year; never later than the first operator period or field inclusion | open |
+| SeismicSurvey | acquisition start or planned start, the earlier | open |
+
+- A wellbore with no dated event has an empty window (`existsFrom` =
+  `existsTo` = its register update date): it exists on no day.
+- A licence window that would end before it starts is empty.
+- History rows the valid-time filter drops, and dates before 1960, are
+  ignored.
+
 ## Reserves versions
 
 `FieldReserves`, `DiscoveryReserves` and `FieldReservesCompany` are version

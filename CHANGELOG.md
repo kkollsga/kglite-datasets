@@ -33,8 +33,8 @@ semantic versioning (workspace version in the root `Cargo.toml`).
   `'NORWEGIAN SEA'`, `'BARENTS SEA'`. `Discovery.nmaName` is no longer
   skipped.
 - **Behaviour change:** the `Wellbore`, `Field`, `Discovery`, `Licence`,
-  `LicenceTask`, `Block` and `StructuralElement` nodes read copies the
-  refresh writes (`csv/_derived_<stem>.csv`). A complement that overrides their
+  `LicenceTask`, `Block`, `SeismicSurvey` and `StructuralElement` nodes read
+  copies the refresh writes (`csv/_derived_<stem>.csv`). A complement that overrides their
   `csv` replaces the copy and loses the derived columns.
 
 ### Added
@@ -101,13 +101,31 @@ semantic versioning (workspace version in the root `Cargo.toml`).
   non-duplicating `recoverable_*` projection uses it (95 discoveries; 14 of
   them have no projected volume). The enhancement version is 15, so a cached
   disk graph rebuilds.
+- Lifecycle windows `existsFrom` / `existsTo` on `Wellbore`, `Licence`,
+  `Field`, `Discovery` and `SeismicSurvey`, as plain `date` properties.
+  They are **not** declared valid time, so every node still reads as
+  current; filter on them explicitly. `existsTo` is the first day the
+  entity no longer exists; empty is open.
+  - Wellbore: from its first status period. A well with no dated event (554)
+    gets an empty window on its register update date.
+  - Licence: `prlDateGranted` to the day after `prlDateValidTo` (Sodir's
+    date is the last valid day).
+  - Field: its earliest registered status, licensee, operator, owner or
+    included-discovery date, else 1 January of its discovery year.
+  - Discovery: the completion of its discovery wellbore when that falls in
+    the discovery year, else 1 January of the year; never later than its
+    first operator period or field inclusion.
+  - SeismicSurvey: the acquisition start or the planned start, whichever is
+    earlier.
 - Status timelines ignore an event dated before 1960: Sodir writes
   1900-01-01 (two facility shutdowns) for an unknown date.
 - Rust: `kglite_datasets::sodir::derived`, `sodir::source_stem`,
   `preprocess::apply_with_derived`, and a `derived` field on
   `PreprocessReport` (struct literals of it break). The refresh report's
-  `preprocess` dict gains `well_status_periods`, `well_status_wells` and
-  `wellbore_outcomes`.
+  `preprocess` dict gains a count per derived table (`well_status_periods`,
+  `facility_status_periods`, `hc_in_formation`, `structural_elements_ids_reassigned`,
+  …). A derived table fetches only its own source; other tables it reads are
+  used when cached.
 
 ### Fixed
 

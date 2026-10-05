@@ -500,3 +500,69 @@ def test_main_areas_use_the_wellbore_casing(tmp_path: Path) -> None:
         "LicenceTask": ["BARENTS SEA"],
         "Block": ["BARENTS SEA"],
     }
+
+
+# ── lifecycle windows (plain properties) ────────────────────────────────
+
+
+def test_lifecycle_windows_are_plain_properties(tmp_path: Path) -> None:
+    nodes = {
+        "Wellbore": _spec("Wellbore"),
+        "Licence": _spec("Licence"),
+        "Field": _spec("Field"),
+        "Discovery": _spec("Discovery"),
+        "SeismicSurvey": _spec("SeismicSurvey"),
+    }
+    csvs = {
+        "wellbore": WELLBORES,
+        "licence": (
+            "prlNpdidLicence,prlName,prlDateGranted,prlDateValidTo\n"
+            "100,PL001,-136771200000,2009-12-31\n"
+            "101,PL999,2020-01-01,\n"
+        ),
+        "field": "fldNpdidField,fldName,fldDiscoveryYear\n1,EKOFISK,1969\n2,NOHIST,1990\n",
+        "field_licensee_hst": "fldNpdidField,cmpNpdidCompany,fldLicenseeFrom,fldLicenseeTo\n1,1,1971-01-01,\n",
+        "field_activity_status_hst": (
+            "fldNpdidField,fldStatus,fldStatusFromDate,fldStatusToDate\n"
+            "1,PRODUCING,1971-06-09,\n"
+            # Inverted by years: not a fact the field existed then.
+            "1,SHUT DOWN,1950-01-01,1940-01-01\n"
+        ),
+        "discovery": (
+            "dscNpdidDiscovery,dscName,dscDiscoveryYear,wlbNpdidWellbore\n"
+            # Completion of the discovery well, in the discovery year.
+            "7,D7,2007,1\n"
+            # The well completed in another year: 1 January of the year.
+            "8,D8,2011,1\n"
+        ),
+        "discovery_operator_hst": "dscNpdidDiscovery,cmpNpdidCompany,dscOperatorFrom,dscOperatorTo\n8,1,2010-05-05,\n",
+        "seismic_acquisition": (
+            "seaNpdidSurvey,seaName,seaDateStarting,seaPlanFromDate\n50,S-1,2001-03-01,2001-02-01\n51,S-2,,2002-02-01\n"
+        ),
+    }
+    _, graph = _build(tmp_path, csvs, nodes)
+
+    def window(label: str, name: str) -> tuple:
+        rows = _rows(
+            graph,
+            f"MATCH (n:{label} {{title: $name}}) RETURN n.existsFrom AS f, n.existsTo AS t",
+            params={"name": name},
+        )
+        return tuple(None if v is None else str(v) for v in (rows[0]["f"], rows[0]["t"]))
+
+    assert window("Wellbore", "15/9-F-12") == ("2007-06-14", None)
+    # Never active: an empty window on the register update date.
+    assert window("Wellbore", "NEVER-1") == ("2026-01-01", "2026-01-01")
+    # Granted 1965-09-01; Sodir's closed validTo becomes the next day.
+    assert window("Licence", "PL001") == ("1965-09-01", "2010-01-01")
+    assert window("Licence", "PL999") == ("2020-01-01", None)
+    assert window("Field", "EKOFISK") == ("1971-01-01", None)
+    assert window("Field", "NOHIST") == ("1990-01-01", None)
+    assert window("Discovery", "D7") == ("2007-08-27", None)
+    assert window("Discovery", "D8") == ("2010-05-05", None)
+    assert window("SeismicSurvey", "S-1") == ("2001-02-01", None)
+    assert window("SeismicSurvey", "S-2") == ("2002-02-01", None)
+    # Plain properties: nothing is declared, so every node reads as current.
+    declared = {r["name"] for r in _rows(graph, "CALL db.temporal.declarations() YIELD name RETURN name")}
+    assert not declared & {"Wellbore", "Licence", "Field", "Discovery", "SeismicSurvey"}
+    assert _rows(graph, "MATCH (n:Wellbore {title: 'NEVER-1'}) RETURN count(n) AS n") == [{"n": 1}]

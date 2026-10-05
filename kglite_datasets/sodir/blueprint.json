@@ -37,7 +37,9 @@
         "fldInplaceFreeGas": "float",
         "fldReservesDate": "date",
         "fldReservesVersion": "int",
-        "fldProducedOE": "float"
+        "fldProducedOE": "float",
+        "existsFrom": "date",
+        "existsTo": "date"
       },
       "skipped": [
         "OBJECTID",
@@ -615,7 +617,9 @@
         "latitude": "location.lat",
         "longitude": "location.lon",
         "wlbPressReleaseUrl": "string",
-        "wlbOutcome": "string"
+        "wlbOutcome": "string",
+        "existsFrom": "date",
+        "existsTo": "date"
       },
       "skipped": [
         "OBJECTID",
@@ -1128,7 +1132,9 @@
         "wkt_geometry": "geometry",
         "latitude": "location.lat",
         "longitude": "location.lon",
-        "nmaName": "string"
+        "nmaName": "string",
+        "existsFrom": "date",
+        "existsTo": "date"
       },
       "skipped": [
         "OBJECTID",
@@ -1565,7 +1571,9 @@
         "prlColorHex": "string",
         "wkt_geometry": "geometry",
         "latitude": "location.lat",
-        "longitude": "location.lon"
+        "longitude": "location.lon",
+        "existsFrom": "date",
+        "existsTo": "date"
       },
       "skipped": [
         "OBJECTID",
@@ -2385,7 +2393,7 @@
       ]
     },
     "SeismicSurvey": {
-      "csv": "csv/seismic_acquisition.csv",
+      "csv": "csv/_derived_seismic_acquisition.csv",
       "pk": "seaNpdidSurvey",
       "title": "seaName",
       "properties": {
@@ -2422,7 +2430,9 @@
         "seaGeotechnical": "string",
         "wkt_geometry": "geometry",
         "latitude": "location.lat",
-        "longitude": "location.lon"
+        "longitude": "location.lon",
+        "existsFrom": "date",
+        "existsTo": "date"
       },
       "skipped": [
         "OBJECTID",

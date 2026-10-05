@@ -114,6 +114,11 @@ const OUTPUTS: &[Derived] = &[
         build: anchors::discovery,
     },
     Derived {
+        stem: "_derived_seismic_acquisition",
+        source: "seismic_acquisition",
+        build: anchors::seismic_acquisition,
+    },
+    Derived {
         stem: "_derived_block",
         source: "block",
         build: anchors::block,

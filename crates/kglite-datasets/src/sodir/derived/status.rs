@@ -186,6 +186,32 @@ pub(super) fn wellbore(csv_dir: &std::path::Path, report: &mut DerivedReport) ->
         outcomes.iter().filter(|o| !o.is_empty()).count(),
     );
     wells.set_column("wlbOutcome", outcomes);
+
+    // Lifecycle window (plain properties): from the first status period,
+    // never ending. A well with no dated event gets an empty window on its
+    // register update date, so a window filter finds it on no day.
+    let updated = wells.getter("wlbDateUpdated");
+    let fallback = NaiveDate::from_ymd_opt(2000, 1, 1);
+    let mut from = Vec::with_capacity(wells.rows.len());
+    let mut to = Vec::with_capacity(wells.rows.len());
+    let mut never_active = 0;
+    for ((_, periods), row) in well_timelines(&wells).into_iter().zip(&wells.rows) {
+        match periods.first() {
+            Some(p) => {
+                from.push(iso(Some(p.from)));
+                to.push(String::new());
+            }
+            None => {
+                never_active += 1;
+                let anchor = iso(date(updated.get(row)).or(fallback));
+                from.push(anchor.clone());
+                to.push(anchor);
+            }
+        }
+    }
+    report.add("wellbore_never_active", never_active);
+    wells.set_column("existsFrom", from);
+    wells.set_column("existsTo", to);
     Ok(wells)
 }
 
