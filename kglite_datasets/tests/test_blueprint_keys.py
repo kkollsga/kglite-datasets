@@ -13,7 +13,7 @@ blueprint is wrong the moment it is written, not the moment it is loaded.
 
 The accepted key sets below mirror ``crates/kglite/src/graph/blueprint/
 schema.rs`` (``ACCEPTED_BLUEPRINT_KEYS`` and friends) in the kglite version at
-the declared floor — 0.19.3 (re-checked 2026-10-05 against the ``v0.19.3``
+the declared floor — 0.19.4 (re-checked 2026-10-06 against the ``v0.19.4``
 tag). 0.16.23 added ``files`` at the top level and ``file`` on a node spec and
 a junction edge; 0.19.0 added ``manifest`` in settings and ``temporal`` on
 node, FK-edge and junction specs; 0.19.2/0.19.3 added ``strict``,

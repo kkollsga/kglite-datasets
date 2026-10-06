@@ -6,6 +6,15 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 
 ## [Unreleased]
 
+## [0.1.27] - 2026-10-06
+
+### Changed
+
+- The declared kglite floor is `>=0.19.4` (package metadata, CI install pins,
+  dev toolchain). The bundled blueprints name a title column on every node
+  type, so titles, node counts and the golden digests are unchanged under
+  0.19.4's title and valid-time writer changes.
+
 ## [0.1.26] - 2026-10-05
 
 ### Breaking changes and migration
