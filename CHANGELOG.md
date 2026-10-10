@@ -6,6 +6,16 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 
 ## [Unreleased]
 
+## [0.1.28] - 2026-10-10
+
+### Changed
+
+- The declared kglite floor is `>=0.19.6` (package metadata, CI install pins,
+  dev toolchain, Rust dependency example). No loader code changed: the bundled
+  blueprints declare no ontology, so 0.19.6 write-time enforcement does not
+  apply, and no kglite error class or code is caught here. Titles, node counts
+  and the golden digests are unchanged.
+
 ## [0.1.27] - 2026-10-06
 
 ### Changed
