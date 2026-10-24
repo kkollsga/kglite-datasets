@@ -6,6 +6,23 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 
 ## [Unreleased]
 
+## [0.1.29] - 2026-10-24
+
+### Changed
+
+- The declared kglite floor is `>=0.21.2` (package metadata, CI install pins,
+  dev toolchain, Rust dependency example). Checked against the 0.20.0 to 0.21.2
+  breaking changes: the bundled blueprints use no bulk loader call, so the
+  `on_invalid='error'` default does not apply; no loader emits `datetime()` or
+  `localtime()` values; no kglite error class or code is caught here. The
+  Python suite (60 passed, 13 opt-in live suites skipped) and the golden digests
+  are unchanged on kglite 0.21.2.
+- A graph this crate builds and saves with kglite 0.21.2 (`sec.kgl`, the
+  Wikidata disk graph) uses the `.kgl` v9 container once it passes the size
+  floors, which kglite releases before 0.21.0 refuse. Those graphs are local
+  caches rebuilt on demand; no published dataset artifact changes. The floor
+  keeps every consumer of this crate on a kglite that reads v9.
+
 ## [0.1.28] - 2026-10-10
 
 ### Changed
