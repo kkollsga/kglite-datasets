@@ -1,16 +1,14 @@
-# kglite-datasets — Claude Code Conventions
+# kglite-datasets — Agent Conventions
 
-**Authority:** `CLAUDE.md` + `.claude/skills/` are the authority this repo's
-agent instructions are regenerated from; `AGENTS.md` and `.agents/skills/` are
-generated adapters (identical modulo the `CLAUDE.md` → `AGENTS.md`
-substitution). Edit the authority and regenerate in the same action — never
-edit an adapter alone.
+**Authority:** `AGENTS.md` is this repo's agent instructions; there is no
+`CLAUDE.md` (Claude Code loads `AGENTS.md` in its place). `.agents/skills/`
+holds the skills; `.claude/skills` is a symlink to it so Claude Code finds them.
 
 ## Doctrine adoption
 
 Follow `../doctrine/learn-from-us.md` → Doctrine sync procedure at planning or
 release entry. Compare numeric semver tuples, merge versioned corrections into
-this declared authority, preserve local improvements, and regenerate adapters.
+this declared authority and preserve local improvements.
 An absent marker requires an adoption audit. Planned or deferred work does not
 advance `dev-docs/.doctrine-synced`; advance only through contiguous entries
 whose actions and local sweeps are complete. Snapshotting never performs sync.
@@ -25,7 +23,7 @@ crates.io + PyPI.
 
 > This file holds the **standing process rules** and points at the two canonical
 > layout maps. The dev working system lives in `dev-docs/` and `inbox/` (both
-> gitignored) and is operated by six skills — see **The dev-docs / inbox / skills
+> gitignored) and is operated by seven skills — see **The dev-docs / inbox / skills
 > system** at the bottom.
 
 ## Build & test
@@ -250,7 +248,8 @@ drifts):
 - **`inbox/README.md`** — the cross-project channel map: the `unread/`→`read/`
   lifecycle, the filename schema, the routing rule.
 
-The skills (`.claude/skills/`):
+The skills (`.agents/skills/`, linked from `.claude/skills`; `make
+check-skill-layout` verifies the link):
 - **`add-todo`** — capture work into `todos.md` + a `plans/` detail doc (the
   single authority on todo-entry shape).
 - **`phased-plan`** — run a large loader/pipeline change as gated phases:

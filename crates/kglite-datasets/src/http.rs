@@ -5,7 +5,7 @@
 //! retry log prefix (marked `[transform]` below). Any future divergence from
 //! upstream must carry a `[transform]` comment so it's auditable line-by-line.
 //!
-//! CLAUDE.md doctrine: **core is sync**. The per-request rate limit is the
+//! AGENTS.md doctrine: **core is sync**. The per-request rate limit is the
 //! throughput gate, so async bought nothing but a tokio runtime. This module
 //! is the single blocking client every loader shares:
 //!

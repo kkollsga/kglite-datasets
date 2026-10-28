@@ -5,7 +5,7 @@ engine — it is the **unchanged-path control cell** for an engine bump. This
 harness covers the half a kglite upgrade can actually move: the graph build,
 the save, and the reopen.
 
-A cold build is a *once-per-event* cost (CLAUDE.md "Performance protocol"), so
+A cold build is a *once-per-event* cost (AGENTS.md "Performance protocol"), so
 this reports the **mean of first events** across fresh instances, never `min`
 — a warm-cache `min` is a run no user ever sees. Size is measured two
 independent ways (node/edge counts and on-disk bytes); the routes diverge

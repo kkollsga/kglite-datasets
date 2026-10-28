@@ -37,7 +37,7 @@ PY_PATHS  := kglite_datasets benchmarks
 
 .PHONY: gate lint lint-rust lint-py fmt fmt-check clippy ruff-check ruff-fix \
         build test determinism bench-smoke bench venv develop pytest clean \
-        check-dev-docs check-free-space prune-target
+        check-dev-docs check-free-space prune-target check-skill-layout
 
 ## Full CI-equivalent gate — the single entry point. Runs every step in
 ## order and stops at the first failure.
@@ -194,3 +194,13 @@ check-dev-docs:
 	echo "dev-docs/ is $${mb} MB (limit $(DEV_DOCS_MAX_MB) MB)"; \
 	[ -z "$$stale" ] || { echo "WARN: past their documented lifetime (dev-docs/README.md):"; \
 	                      echo "$$stale" | sed 's/^/    /'; }
+
+## `.claude/skills` must be a symlink resolving to `.agents/skills` (doctrine
+## 0.1.13). Both folders are gitignored workstation state, so this is a local
+## check, not part of `gate` or CI.
+.PHONY: check-skill-layout
+check-skill-layout:
+	@test -d .agents/skills || { echo "ERROR: .agents/skills is missing"; exit 1; }; \
+	test -L .claude/skills || { echo "ERROR: .claude/skills is not a symlink; merge it into .agents/skills, then: ln -s ../.agents/skills .claude/skills"; exit 1; }; \
+	[ "$$(cd .claude/skills && pwd -P)" = "$$(cd .agents/skills && pwd -P)" ] || { echo "ERROR: .claude/skills does not resolve to .agents/skills"; exit 1; }; \
+	echo "skills layout ok"

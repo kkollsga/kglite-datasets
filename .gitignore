@@ -23,23 +23,16 @@
 
 # Inbox of feedback/coordination notes (`unread/` = needs action, `read/` =
 # archive). Kept at the repo root; local working state, never committed —
-# see the "Inbox hygiene" section in CLAUDE.md and inbox/README.md.
+# see the "Inbox hygiene" section in AGENTS.md and inbox/README.md.
 /inbox/
 
 # Claude Code local settings (skills / working config; local state, never
 # committed — mirrors kglite's .gitignore).
 /.claude/
 
-# Same reason as /.claude/ above: the Codex mirror is workstation-local
-# agent state, and was neither tracked nor ignored — so a stray `git add -A`
-# could have committed it while its Claude twin stayed out.
+# The real skills folder (`.claude/skills` is a symlink to it). Workstation-
+# local agent state, ignored for the same reason as /.claude/ above.
 /.agents/
-
-# The Codex adapter of CLAUDE.md — generated from it (title + `CLAUDE.md` →
-# `AGENTS.md` + `.claude/skills/` → `.agents/skills/`; the Authority block is
-# exempt from the substitution), so it shares `/.agents/`'s status rather than
-# being a second tracked copy every conventions edit has to touch.
-/AGENTS.md
 
 # Python virtualenvs / caches
 /.venv/
