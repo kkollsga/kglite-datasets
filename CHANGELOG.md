@@ -11,7 +11,7 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 - Python 3.12 or newer is required (`requires-python >=3.12`, abi3 wheel built for
   `cp312`). Python 3.10 and 3.11 are dropped. If you are on 3.10 or 3.11, stay on
   kglite-datasets 0.1.29 with kglite 0.21.2, the newest pair that installs there.
-  CI covers Python 3.12.
+  CI covers Python 3.12 through 3.15.
 
 ### Changed
 
@@ -19,13 +19,20 @@ semantic versioning (workspace version in the root `Cargo.toml`).
   dev toolchain, Rust dependency example). The Python suite (60 passed, 13
   opt-in live suites skipped) and the golden digests are unchanged on kglite
   0.21.3, on Python 3.12 and 3.15.
-- Dependencies move to their latest releases: pyo3 0.30, thiserror 2, sha2 0.11,
-  zip 9, geo 0.33, geojson 1, wkt 0.14, quick-xml 0.42, csv 1.4, chrono 0.4.45,
-  regex 1.13, rayon 1.12, serde 1.0.229, serde_json 1.0.154; ruff 0.17.3 in CI;
-  sphinx 9.1.1 or newer for the docs. The CSV golden digests are unchanged.
-  `ureq` stays on 2.x: 3.x replaces the agent, error and streaming-body API
-  and applies a default body-size limit, and the fetch paths need a live-network
-  check that the offline suite cannot give.
+- Dependencies move to their latest releases: pyo3 0.30, ureq 3, thiserror 2,
+  sha2 0.11, zip 9, geo 0.33, geojson 1, wkt 0.14, quick-xml 0.42, csv 1.4,
+  chrono 0.4.45, regex 1.13, rayon 1.12, serde 1.0.229, serde_json 1.0.154;
+  ruff 0.17.3 in CI; sphinx 9.1.1 or newer for the docs. The CSV golden
+  digests are unchanged.
+- The HTTP client moves to ureq 3. In-memory downloads (`fetch_bytes`,
+  `fetch_json`, and `fetch_to_file`, which buffers the body) are bounded at
+  16 GiB instead of ureq 3's 10 MB default, so the 1-2 GB SEC bulk archives
+  still download whole. A body over the limit is an error, never a truncation.
+  The Wikidata dump stream stays unlimited and unbuffered. Redirects are still
+  followed, 4xx/5xx still surface as `HttpError::Status`, and the overall and
+  connect timeouts keep their meaning. Local mock-server tests now cover a
+  body over 10 MB, a redirect, an overall timeout, and the Wikidata `HEAD`
+  probe and `Range` resume.
 
 ## [0.1.29] - 2026-10-24
 

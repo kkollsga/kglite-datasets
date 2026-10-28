@@ -40,9 +40,9 @@ sha2 = "0.11"
 chrono = { version = "0.4.45", features = ["serde"] }
 regex = "1.13"
 rayon = "1.12"
-# ureq 2 default features give rustls TLS + auto gzip; `json` adds the
-# serde_json body helpers sodir's fetch_json uses.
-ureq = { version = "2", features = ["json"] }
+# ureq 3 default features give rustls TLS + auto gzip. JSON bodies are decoded
+# with serde_json (sodir's fetch_json), so the `json` feature is not enabled.
+ureq = "3"
 
 # --- loader-specific (feature-gated) ---
 zip = { version = "9", optional = true, default-features = false, features = ["deflate"] }

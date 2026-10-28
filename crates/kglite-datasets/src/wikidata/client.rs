@@ -52,9 +52,9 @@ impl WikidataClient {
             connect_timeout: CONNECT_TIMEOUT,
             // Deliberately **no** overall/read timeout — the dump
             // download (10-20 GB) streams for a long time and any
-            // whole-request or read deadline would abort it. ureq 2.x
-            // leaves `timeout_read`/`timeout_write` unset by default, so
-            // `overall_timeout: None` genuinely means no read deadline.
+            // whole-request or read deadline would abort it. ureq 3
+            // leaves every timeout unset by default, so `overall_timeout:
+            // None` genuinely means no read deadline.
             overall_timeout: None,
             // No rate gate: this is a single sequential download, not an
             // API sweep. And no retry wrapper around the stream — resume
@@ -68,12 +68,16 @@ impl WikidataClient {
     }
 
     /// `HEAD` probe for the dump's `Last-Modified`. ureq treats any
-    /// non-2xx as an `Err`, so a returned response is already a success
+    /// 4xx/5xx as an `Err`, so a returned response is already a success
     /// status — the explicit success check the reqwest version needed
     /// is subsumed into the `Err(Status)` arm.
     pub fn head(&self, url: &str) -> Result<RemoteMeta> {
         let resp = self.call(self.inner.agent().head(url), url)?;
-        let last_modified = resp.header("Last-Modified").and_then(parse_http_date);
+        let last_modified = resp
+            .headers()
+            .get("Last-Modified")
+            .and_then(|v| v.to_str().ok())
+            .and_then(parse_http_date);
         Ok(RemoteMeta { last_modified })
     }
 
@@ -85,15 +89,17 @@ impl WikidataClient {
         let start = std::fs::metadata(dest).map(|m| m.len()).unwrap_or(0);
         let mut req = self.inner.agent().get(url);
         if start > 0 {
-            req = req.set("Range", &format!("bytes={start}-"));
+            req = req.header("Range", format!("bytes={start}-"));
         }
         let resp = self.call(req, url)?;
         // 206 Partial Content ⇒ the server honoured the Range and we
         // append; any other 2xx (typically 200) ⇒ range ignored, so we
         // restart from scratch.
-        let resuming = start > 0 && resp.status() == 206;
+        let resuming = start > 0 && resp.status().as_u16() == 206;
         let content_len = resp
-            .header("Content-Length")
+            .headers()
+            .get("Content-Length")
+            .and_then(|v| v.to_str().ok())
             .and_then(|v| v.parse::<u64>().ok());
         let total = content_len.map(|c| c + if resuming { start } else { 0 });
 
@@ -113,7 +119,8 @@ impl WikidataClient {
         }
         // Manual chunked read loop (not `io::copy`) so we can interleave
         // the 10 s progress prints with the write-through to disk.
-        let mut reader = resp.into_reader();
+        // The dump is 10-20 GB: `into_reader` is unlimited, which is intended.
+        let mut reader = resp.into_body().into_reader();
         let mut buf = vec![0u8; CHUNK_SIZE];
         loop {
             let n = reader
@@ -136,18 +143,22 @@ impl WikidataClient {
         Ok(())
     }
 
-    /// Drive a prepared request, normalising ureq's "non-2xx is an
+    /// Drive a prepared request, normalising ureq's "4xx/5xx is an
     /// `Err`" contract into [`WikidataError`]: a status becomes
     /// [`WikidataError::BadStatus`] (so callers keep seeing the code)
     /// and a transport failure becomes [`WikidataError::Http`].
-    fn call(&self, req: ureq::Request, url: &str) -> Result<ureq::Response> {
+    fn call(
+        &self,
+        req: ureq::RequestBuilder<ureq::typestate::WithoutBody>,
+        url: &str,
+    ) -> Result<ureq::http::Response<ureq::Body>> {
         match req.call() {
             Ok(resp) => Ok(resp),
-            Err(ureq::Error::Status(code, _resp)) => Err(WikidataError::BadStatus {
+            Err(ureq::Error::StatusCode(code)) => Err(WikidataError::BadStatus {
                 status: code,
                 url: url.to_string(),
             }),
-            Err(ureq::Error::Transport(t)) => Err(WikidataError::Http(t.to_string())),
+            Err(e) => Err(WikidataError::Http(e.to_string())),
         }
     }
 }
@@ -233,5 +244,83 @@ mod tests {
         client.download_resumable(url, &dest, false).unwrap();
         let resumed = std::fs::read(&dest).unwrap();
         assert_eq!(resumed, full, "resumed file must byte-match the original");
+    }
+
+    // --- Local mock-server tests (no network) -----------------------------
+
+    use std::net::TcpListener;
+
+    /// One-connection server: hands the raw request text to `respond`, writes
+    /// back what it returns, and sends the request text through the channel.
+    fn spawn_once(
+        respond: impl Fn(&str) -> String + Send + 'static,
+    ) -> (String, std::sync::mpsc::Receiver<String>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let Ok((mut stream, _)) = listener.accept() else {
+                return;
+            };
+            let mut buf = [0u8; 4096];
+            let n = stream.read(&mut buf).unwrap_or(0);
+            let req = String::from_utf8_lossy(&buf[..n]).to_string();
+            let _ = stream.write_all(respond(&req).as_bytes());
+            let _ = tx.send(req);
+        });
+        (format!("http://{addr}"), rx)
+    }
+
+    #[test]
+    fn head_reads_last_modified_and_maps_404() {
+        let (url, _) = spawn_once(|_| {
+            "HTTP/1.1 200 OK\r\nLast-Modified: Wed, 21 Oct 2015 07:28:00 GMT\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".into()
+        });
+        let meta = WikidataClient::new().unwrap().head(&url).unwrap();
+        assert_eq!(
+            meta.last_modified.unwrap().to_rfc3339(),
+            "2015-10-21T07:28:00+00:00"
+        );
+
+        let (url, _) = spawn_once(|_| {
+            "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".into()
+        });
+        match WikidataClient::new().unwrap().head(&url).unwrap_err() {
+            WikidataError::BadStatus { status, .. } => assert_eq!(status, 404),
+            other => panic!("expected BadStatus 404, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn download_resumes_with_a_range_request_and_appends_on_206() {
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("dump.part");
+        std::fs::write(&dest, b"hello ").unwrap();
+        let (url, rx) = spawn_once(|_| {
+            "HTTP/1.1 206 Partial Content\r\nContent-Length: 5\r\nConnection: close\r\n\r\nworld"
+                .into()
+        });
+        WikidataClient::new()
+            .unwrap()
+            .download_resumable(&url, &dest, false)
+            .unwrap();
+        let req = rx.recv().unwrap().to_ascii_lowercase();
+        assert!(req.contains("\r\nrange: bytes=6-"), "request was {req}");
+        assert_eq!(std::fs::read(&dest).unwrap(), b"hello world");
+    }
+
+    #[test]
+    fn download_restarts_when_the_server_ignores_the_range() {
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("dump.part");
+        std::fs::write(&dest, b"stale").unwrap();
+        let (url, _) = spawn_once(|_| {
+            "HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\nfull".into()
+        });
+        WikidataClient::new()
+            .unwrap()
+            .download_resumable(&url, &dest, false)
+            .unwrap();
+        assert_eq!(std::fs::read(&dest).unwrap(), b"full");
     }
 }

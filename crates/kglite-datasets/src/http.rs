@@ -24,12 +24,19 @@
 //!
 //! ## The ureq status trap
 //!
-//! Unlike reqwest, ureq treats **any non-2xx response as an `Err`**
-//! (`ureq::Error::Status(code, resp)`). Callers that branch on 404 / 429 still
+//! Unlike reqwest, ureq treats **any 4xx/5xx response as an `Err`**
+//! (`ureq::Error::StatusCode(code)`). Callers that branch on 404 / 429 still
 //! need to see the code, so `DatasetClient::request_once` unwraps that into a
 //! structured [`HttpError::Status`] carrying the raw status.
+//!
+//! ## The ureq body limit
+//!
+//! ureq 3 caps `read_to_vec` / `read_to_string` at 10 MB, and that cap applies
+//! to the decompressed size. The SEC bulk archives (`submissions.zip`,
+//! `companyfacts.zip`) are well over a gigabyte and are held in memory by
+//! `fetch_to_file`, so [`MAX_BODY_BYTES`] sets the ceiling explicitly instead
+//! of inheriting the default (which would fail every bulk download).
 
-use std::io::Read;
 use std::num::NonZeroU32;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -39,6 +46,13 @@ use thiserror::Error;
 
 /// Maximum single backoff sleep between retries.
 const MAX_BACKOFF_MS: u64 = 30_000;
+
+/// Largest response body [`DatasetClient::fetch_bytes`] will buffer. The SEC
+/// bulk archives are 1-2 GB today and are held whole in memory; 16 GiB leaves
+/// an order of magnitude of growth and still stops a runaway or hostile
+/// response from exhausting memory. A body past the limit is an error, never a
+/// silent truncation.
+const MAX_BODY_BYTES: u64 = 16 * 1024 * 1024 * 1024;
 
 /// Structured HTTP error shared by every dataset loader. Each dataset's own
 /// error type maps from this (see `SecClient::map_http`).
@@ -122,20 +136,20 @@ impl DatasetClient {
     /// Build a client from `config`. Infallible — ureq's agent builder
     /// constructs a default rustls config lazily and never fails here.
     pub fn new(config: DatasetClientConfig) -> Self {
-        let mut builder = ureq::AgentBuilder::new()
-            .user_agent(&config.user_agent)
-            .timeout_connect(config.connect_timeout);
         // gzip decompression is automatic via ureq's default `gzip` feature —
-        // no builder call. Only set the overall timeout when one is requested;
-        // leaving it unset means no read deadline.
-        if let Some(timeout) = config.overall_timeout {
-            builder = builder.timeout(timeout);
-        }
+        // no builder call. `timeout_global` covers the whole call including the
+        // body read; `None` leaves no read deadline. Redirects are followed
+        // (ureq's default of 5 hops), as in ureq 2.
+        let ureq_config = ureq::config::Config::builder()
+            .user_agent(config.user_agent.as_str())
+            .timeout_connect(Some(config.connect_timeout))
+            .timeout_global(config.overall_timeout)
+            .build();
         let min_gap = config
             .rate_per_sec
             .map(|r| Duration::from_secs_f64(1.0 / r.get() as f64));
         DatasetClient {
-            agent: builder.build(),
+            agent: ureq::Agent::new_with_config(ureq_config),
             last_request: Arc::new(Mutex::new(None)),
             min_gap,
             retry_count: config.retry_count,
@@ -175,22 +189,21 @@ impl DatasetClient {
     }
 
     /// One request, no retry. Reads the full body into memory. Maps ureq's
-    /// non-2xx-is-`Err` contract into [`HttpError::Status`].
+    /// 4xx/5xx-is-`Err` contract into [`HttpError::Status`].
     fn request_once(&self, url: &str) -> Result<Vec<u8>, HttpError> {
         match self.agent.get(url).call() {
-            Ok(resp) => {
-                let mut buf = Vec::new();
-                resp.into_reader()
-                    .read_to_end(&mut buf)
-                    .map_err(|e| HttpError::Transport(e.to_string()))?;
-                Ok(buf)
-            }
-            // ureq returns Err for ANY non-2xx — surface the code.
-            Err(ureq::Error::Status(code, _resp)) => Err(HttpError::Status {
+            Ok(resp) => resp
+                .into_body()
+                .into_with_config()
+                .limit(MAX_BODY_BYTES)
+                .read_to_vec()
+                .map_err(|e| HttpError::Transport(e.to_string())),
+            // ureq returns Err for ANY 4xx/5xx — surface the code.
+            Err(ureq::Error::StatusCode(code)) => Err(HttpError::Status {
                 code,
                 url: url.to_string(),
             }),
-            Err(ureq::Error::Transport(t)) => Err(HttpError::Transport(t.to_string())),
+            Err(e) => Err(HttpError::Transport(e.to_string())),
         }
     }
 
@@ -331,7 +344,7 @@ mod tests {
     // socket each request). This exercises the real retry/backoff loop and
     // the status→HttpError mapping without any external network.
 
-    use std::io::Write;
+    use std::io::{Read, Write};
     use std::net::TcpListener;
 
     /// Spawn a mock server that replies with `scripts[i]` = (status, body) for
@@ -430,5 +443,87 @@ mod tests {
             .fetch_to_file(&url, &path, FetchMode::OnlyIfMissing)
             .expect("skip");
         assert!(!wrote2, "OnlyIfMissing must skip an existing file");
+    }
+
+    /// Spawn a mock server running `handler(connection_index, stream)` for
+    /// each of `n` connections. For tests that need raw control over the
+    /// response (large bodies, redirects, stalls).
+    fn spawn_raw(
+        n: usize,
+        handler: impl Fn(usize, &mut std::net::TcpStream) + Send + 'static,
+    ) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            for i in 0..n {
+                let Ok((mut stream, _)) = listener.accept() else {
+                    return;
+                };
+                let mut buf = [0u8; 4096];
+                let _ = stream.read(&mut buf);
+                handler(i, &mut stream);
+            }
+        });
+        format!("http://{addr}")
+    }
+
+    #[test]
+    fn fetch_bytes_returns_a_body_larger_than_ureqs_default_limit() {
+        // ureq 3 refuses `read_to_vec` past 10 MB unless a limit is set;
+        // the SEC bulk archives are far larger. 11 MiB must arrive whole.
+        const LEN: usize = 11 * 1024 * 1024;
+        let url = spawn_raw(1, |_, stream| {
+            let head =
+                format!("HTTP/1.1 200 OK\r\nContent-Length: {LEN}\r\nConnection: close\r\n\r\n");
+            let _ = stream.write_all(head.as_bytes());
+            let _ = stream.write_all(&vec![b'x'; LEN]);
+        });
+        let got = fast_client(0).fetch_bytes(&url).expect("large body");
+        assert_eq!(got.len(), LEN);
+        assert!(got.iter().all(|&b| b == b'x'));
+    }
+
+    #[test]
+    fn fetch_bytes_follows_a_redirect() {
+        let url = spawn_raw(2, |i, stream| {
+            let resp = if i == 0 {
+                "HTTP/1.1 302 Found\r\nLocation: /moved\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_string()
+            } else {
+                "HTTP/1.1 200 OK\r\nContent-Length: 7\r\nConnection: close\r\n\r\nREDIRED"
+                    .to_string()
+            };
+            let _ = stream.write_all(resp.as_bytes());
+        });
+        let got = fast_client(0).fetch_bytes(&url).expect("redirect");
+        assert_eq!(got, b"REDIRED");
+    }
+
+    #[test]
+    fn overall_timeout_aborts_a_stalled_response() {
+        // Headers promise a body that never arrives; the server holds the
+        // socket for 3 s. A 300 ms overall deadline must cut it short.
+        let url = spawn_raw(1, |_, stream| {
+            let _ = stream.write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\nConnection: close\r\n\r\npartial",
+            );
+            let _ = stream.flush();
+            std::thread::sleep(Duration::from_secs(3));
+        });
+        let client = DatasetClient::new(DatasetClientConfig {
+            user_agent: "kglite-datasets-test".into(),
+            connect_timeout: Duration::from_secs(5),
+            overall_timeout: Some(Duration::from_millis(300)),
+            rate_per_sec: None,
+            retry_count: 0,
+            base_backoff_ms: 1,
+        });
+        let start = Instant::now();
+        let err = client.fetch_bytes(&url).unwrap_err();
+        assert!(matches!(err, HttpError::Transport(_)), "got {err:?}");
+        assert!(
+            start.elapsed() < Duration::from_millis(2000),
+            "deadline not enforced, took {:?}",
+            start.elapsed()
+        );
     }
 }
