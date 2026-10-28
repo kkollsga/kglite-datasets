@@ -16,7 +16,16 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 ### Changed
 
 - The declared kglite floor is `>=0.21.3` (package metadata, CI install pins,
-  dev toolchain, Rust dependency example).
+  dev toolchain, Rust dependency example). The Python suite (60 passed, 13
+  opt-in live suites skipped) and the golden digests are unchanged on kglite
+  0.21.3, on Python 3.12 and 3.15.
+- Dependencies move to their latest releases: pyo3 0.30, thiserror 2, sha2 0.11,
+  zip 9, geo 0.33, geojson 1, wkt 0.14, quick-xml 0.42, csv 1.4, chrono 0.4.45,
+  regex 1.13, rayon 1.12, serde 1.0.229, serde_json 1.0.154; ruff 0.17.3 in CI;
+  sphinx 9.1.1 or newer for the docs. The CSV golden digests are unchanged.
+  `ureq` stays on 2.x: 3.x replaces the agent, error and streaming-body API
+  and applies a default body-size limit, and the fetch paths need a live-network
+  check that the offline suite cannot give.
 
 ## [0.1.29] - 2026-10-24
 
