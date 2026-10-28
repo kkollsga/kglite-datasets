@@ -79,13 +79,14 @@ jobs:
         run: ruff format --check kglite_datasets benchmarks
 
   python:
-    name: Python (${{ matrix.os }}, kglite ${{ matrix.kglite-label }})
+    name: Python ${{ matrix.python-version }} (${{ matrix.os }}, kglite ${{ matrix.kglite-label }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
+        python-version: ['3.12', '3.13', '3.14', '3.15']
         # Both ends of the declared `kglite>=0.21.3` range. Testing only the
         # latest engine leaves the floor unverified — it would rot silently
         # until a downstream that legitimately resolved an older kglite hit a
@@ -96,22 +97,31 @@ jobs:
             kglite-label: latest
           - kglite-spec: 'kglite==0.21.3'
             kglite-label: floor
+        exclude:
+          # The floor engine is checked on the oldest interpreter only; the
+          # interpreter axis is exercised against the newest engine.
+          - kglite-spec: 'kglite==0.21.3'
+            python-version: '3.13'
+          - kglite-spec: 'kglite==0.21.3'
+            python-version: '3.14'
+          - kglite-spec: 'kglite==0.21.3'
+            python-version: '3.15'
     steps:
       - uses: actions/checkout@v7
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Set up Python 3.12
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v7
         with:
-          python-version: '3.12'
+          python-version: ${{ matrix.python-version }}
           cache: pip
 
       - name: Cache cargo registry & target
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: python-${{ matrix.os }}
+          shared-key: python-${{ matrix.os }}-${{ matrix.python-version }}
           workspaces: ". -> target"
 
       - name: Create venv and install build + runtime deps
