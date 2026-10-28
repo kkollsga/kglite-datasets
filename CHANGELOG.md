@@ -6,6 +6,8 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 
 ## [Unreleased]
 
+## [0.1.30] - 2026-10-29
+
 ### Breaking
 
 - Python 3.12 or newer is required (`requires-python >=3.12`, abi3 wheel built for
@@ -15,10 +17,10 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 
 ### Changed
 
-- The declared kglite floor is `>=0.21.3` (package metadata, CI install pins,
+- The declared kglite floor is `>=0.21.4` (package metadata, CI install pins,
   dev toolchain, Rust dependency example). The Python suite (60 passed, 13
   opt-in live suites skipped) and the golden digests are unchanged on kglite
-  0.21.3, on Python 3.12 and 3.15.
+  0.21.4, on Python 3.12 and 3.15.
 - Dependencies move to their latest releases: pyo3 0.30, ureq 3, thiserror 2,
   sha2 0.11, zip 9, geo 0.33, geojson 1, wkt 0.14, quick-xml 0.42, csv 1.4,
   chrono 0.4.45, regex 1.13, rayon 1.12, serde 1.0.229, serde_json 1.0.154;
