@@ -56,9 +56,7 @@ pub fn parse_formd<R: BufRead>(reader: R) -> Result<FormD> {
     loop {
         match xml.read_event_into(&mut buf) {
             Ok(Event::Start(e)) => {
-                let name = std::str::from_utf8(e.name().as_ref())
-                    .map_err(|err| SecError::Decode(format!("Form D tag: {err}")))?
-                    .to_string();
+                let name = e.name().as_ref().to_string();
                 path.push(name);
                 text.clear();
             }
@@ -69,9 +67,7 @@ pub fn parse_formd<R: BufRead>(reader: R) -> Result<FormD> {
                 append_xml_reference(&mut text, &reference, "Form D text")?;
             }
             Ok(Event::End(e)) => {
-                let name = std::str::from_utf8(e.name().as_ref())
-                    .map_err(|err| SecError::Decode(format!("Form D end tag: {err}")))?
-                    .to_string();
+                let name = e.name().as_ref().to_string();
                 apply(&name, &path, text.trim(), &mut out);
                 path.pop();
                 text.clear();

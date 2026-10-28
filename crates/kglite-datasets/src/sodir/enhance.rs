@@ -469,7 +469,7 @@ fn distance_metres(origin: geo::Point<f64>, geometry: &Geometry<f64>) -> f64 {
     if projected.contains(&point) || projected.intersects(&point) {
         0.0
     } else {
-        Euclidean::distance(&projected, &point)
+        Euclidean.distance(&projected, &point)
     }
 }
 

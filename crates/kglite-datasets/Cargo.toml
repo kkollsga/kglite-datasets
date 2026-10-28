@@ -32,30 +32,30 @@ wikidata = []
 # Shared across the loaders + the DatasetClient (http.rs). Pins held in
 # lockstep with kglite's crates/kglite/Cargo.toml — see dev-docs plan
 # "Phase 9 — Lockstep dep audit"; drift silently breaks byte parity.
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.149"
-thiserror = "1"
-csv = "1.3"
-sha2 = "0.10"
-chrono = { version = "0.4.43", features = ["serde"] }
-regex = "1"
-rayon = "1.10"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+thiserror = "2"
+csv = "1.4"
+sha2 = "0.11"
+chrono = { version = "0.4.45", features = ["serde"] }
+regex = "1.13"
+rayon = "1.12"
 # ureq 2 default features give rustls TLS + auto gzip; `json` adds the
 # serde_json body helpers sodir's fetch_json uses.
 ureq = { version = "2", features = ["json"] }
 
 # --- loader-specific (feature-gated) ---
-zip = { version = "2", optional = true, default-features = false, features = ["deflate"] }
-quick-xml = { version = "0.41", optional = true }
-geojson = { version = "0.24", optional = true }
-geo = { version = "0.29", optional = true }
-wkt = { version = "0.11", optional = true, features = ["geo-types"] }
+zip = { version = "9", optional = true, default-features = false, features = ["deflate"] }
+quick-xml = { version = "0.42", optional = true }
+geojson = { version = "1", optional = true }
+geo = { version = "0.33", optional = true }
+wkt = { version = "0.14", optional = true, features = ["geo-types"] }
 
 [dev-dependencies]
 # Golden oracle: SHA-256 of the canonical rendering of the loaders' emitted
 # CSVs (the Rust crate's output boundary — graph-building is a Python-layer
 # op via kglite's `from_blueprint`, goldened separately in the Python suite).
-tempfile = "3"
+tempfile = "3.27"
 # `csv` is a normal dep, but integration tests under tests/ can only reach
 # dev-deps + the public API, so it's declared here too (already compiled).
-csv = "1.3"
+csv = "1.4"

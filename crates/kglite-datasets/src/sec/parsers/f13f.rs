@@ -119,9 +119,7 @@ pub fn parse_13f_info_table<R: BufRead>(reader: R) -> Result<Vec<Holding>> {
 fn local_name(name: &quick_xml::name::QName) -> Option<String> {
     // local_name() strips the namespace prefix; we copy out as owned
     // String so the borrow doesn't escape the event lifetime.
-    std::str::from_utf8(name.local_name().as_ref())
-        .ok()
-        .map(|s| s.to_string())
+    Some(name.local_name().as_ref().to_string())
 }
 
 fn apply(h: &mut Holding, leaf: &str, path: &[String], text: &str) {

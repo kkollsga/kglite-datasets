@@ -726,7 +726,10 @@ fn row_json(row: &Row) -> String {
 fn digest(value: &str) -> String {
     let mut hash = Sha256::new();
     hash.update(value.as_bytes());
-    format!("{:x}", hash.finalize())
+    hash.finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 fn read_optional(path: &Path) -> Result<Vec<Row>> {

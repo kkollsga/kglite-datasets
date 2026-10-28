@@ -163,9 +163,7 @@ pub fn parse_form4<R: BufRead>(reader: R) -> Result<Form4> {
     loop {
         match xml.read_event_into(&mut buf) {
             Ok(Event::Start(e)) => {
-                let name = std::str::from_utf8(e.name().as_ref())
-                    .map_err(|err| SecError::Decode(format!("Form 4 tag: {err}")))?
-                    .to_string();
+                let name = e.name().as_ref().to_string();
                 path.push(name.clone());
                 current_text.clear();
                 match name.as_str() {
@@ -205,9 +203,7 @@ pub fn parse_form4<R: BufRead>(reader: R) -> Result<Form4> {
                 // Self-closing tags. Only `<footnoteId id="Fn"/>`
                 // matters here — it references a footnote whose text
                 // appears elsewhere in the document.
-                let name = std::str::from_utf8(e.name().as_ref())
-                    .map_err(|err| SecError::Decode(format!("Form 4 empty tag: {err}")))?
-                    .to_string();
+                let name = e.name().as_ref().to_string();
                 if name == "footnoteId"
                     && path.last().map(|s| s.as_str()) == Some("transactionPricePerShare")
                 {
@@ -226,9 +222,7 @@ pub fn parse_form4<R: BufRead>(reader: R) -> Result<Form4> {
                 append_xml_reference(&mut current_text, &reference, "Form 4 text")?;
             }
             Ok(Event::End(e)) => {
-                let name = std::str::from_utf8(e.name().as_ref())
-                    .map_err(|err| SecError::Decode(format!("Form 4 end tag: {err}")))?
-                    .to_string();
+                let name = e.name().as_ref().to_string();
                 if name == "footnote" {
                     if let Some(id) = current_footnote_id.take() {
                         footnotes.insert(id, current_text.trim().to_string());
@@ -302,7 +296,7 @@ pub fn parse_form4<R: BufRead>(reader: R) -> Result<Form4> {
 /// from UTF-8. Returns None on missing attribute or decode error.
 fn attr_id(e: &quick_xml::events::BytesStart) -> Option<String> {
     let attr = e.try_get_attribute("id").ok().flatten()?;
-    std::str::from_utf8(&attr.value).ok().map(String::from)
+    Some(attr.value.to_string())
 }
 
 /// Parse SEC's canonical weighted-average price-range disclosure

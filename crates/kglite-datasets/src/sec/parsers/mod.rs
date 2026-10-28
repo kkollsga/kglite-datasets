@@ -11,20 +11,19 @@ use crate::sec::error::{Result, SecError};
 /// Decode and unescape one XML text event into an existing parser buffer.
 ///
 /// quick-xml 0.41 split the former `BytesText::unescape` operation into
-/// decoding and entity-unescaping. Keeping the pair here prevents SEC parsers
-/// from drifting into decode-only behavior that would leak `&amp;` and numeric
-/// entities into graph properties.
+/// content access and entity-unescaping (0.42 hands out `str` content directly,
+/// with XML 1.0 end-of-line normalization). Keeping the pair here prevents SEC
+/// parsers from drifting into content-only behavior that would leak `&amp;` and
+/// numeric entities into graph properties.
 fn append_unescaped_text(target: &mut String, text: &BytesText<'_>, context: &str) -> Result<()> {
-    let decoded = text
-        .decode()
-        .map_err(|error| SecError::Decode(format!("{context}: {error}")))?;
+    let decoded = text.xml10_content();
     let unescaped = quick_xml::escape::unescape(&decoded)
         .map_err(|error| SecError::Decode(format!("{context}: {error}")))?;
     target.push_str(&unescaped);
     Ok(())
 }
 
-/// Resolve a quick-xml 0.41 reference event with the same predefined/numeric
+/// Resolve a quick-xml reference event with the same predefined/numeric
 /// entity semantics the old `BytesText::unescape` path provided.
 fn append_xml_reference(
     target: &mut String,
@@ -38,9 +37,7 @@ fn append_xml_reference(
         target.push(character);
         return Ok(());
     }
-    let name = reference
-        .decode()
-        .map_err(|error| SecError::Decode(format!("{context}: {error}")))?;
+    let name = reference.xml10_content();
     let value = quick_xml::escape::resolve_predefined_entity(&name)
         .ok_or_else(|| SecError::Decode(format!("{context}: unrecognized entity `{name}`")))?;
     target.push_str(value);

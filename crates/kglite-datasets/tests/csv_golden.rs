@@ -69,7 +69,10 @@ fn canonical_csv_dir(dir: &Path) -> String {
 fn digest(s: &str) -> String {
     let mut h = Sha256::new();
     h.update(s.as_bytes());
-    format!("{:x}", h.finalize())
+    h.finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 /// Copy every file in `src` into a fresh tempdir (preprocess mutates in place).

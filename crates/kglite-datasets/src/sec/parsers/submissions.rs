@@ -271,7 +271,10 @@ impl<R: Read + std::io::Seek> Iterator for SubmissionsZipIter<R> {
             };
             // Filename inside the ZIP; we keep only CIK###.json — the
             // archive also has "submissions.json" index files we skip.
-            let name = entry.name().to_string();
+            let name = match entry.name() {
+                Ok(name) => name.into_owned(),
+                Err(e) => return Some(Err(SecError::Zip(e))),
+            };
             if !name.starts_with("CIK") || !name.ends_with(".json") {
                 continue;
             }
