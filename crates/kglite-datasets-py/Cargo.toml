@@ -15,14 +15,14 @@ description = "PyO3 wrapper for kglite-datasets — Python bindings around the S
 publish = false
 
 [features]
-# `abi3` (single cdylib for Python 3.10+) is default-on so `cargo build` /
+# `abi3` (single cdylib for Python 3.12+) is default-on so `cargo build` /
 # `maturin develop` behave normally. `python-extension` toggles pyo3's
 # extension-module feature — off for plain `cargo build` (so the rlib is
 # reusable and the workspace builds without a libpython link surprise), on
 # for the maturin wheel build. Same pattern as kglite-py.
 default = ["abi3"]
 python-extension = ["pyo3/extension-module"]
-abi3 = ["pyo3/abi3-py310"]
+abi3 = ["pyo3/abi3-py312"]
 
 [lib]
 # `name = kglite_datasets_py` avoids an rlib filename collision with the

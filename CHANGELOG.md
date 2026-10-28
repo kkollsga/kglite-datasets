@@ -6,6 +6,18 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 
 ## [Unreleased]
 
+### Breaking
+
+- Python 3.12 or newer is required (`requires-python >=3.12`, abi3 wheel built for
+  `cp312`). Python 3.10 and 3.11 are dropped. If you are on 3.10 or 3.11, stay on
+  kglite-datasets 0.1.29 with kglite 0.21.2, the newest pair that installs there.
+  CI covers Python 3.12.
+
+### Changed
+
+- The declared kglite floor is `>=0.21.3` (package metadata, CI install pins,
+  dev toolchain, Rust dependency example).
+
 ## [0.1.29] - 2026-10-24
 
 ### Changed

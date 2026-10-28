@@ -6,7 +6,7 @@ build-backend = "maturin"
 name = "kglite-datasets"
 description = "Fetch-build-cache dataset loaders for kglite — SEC EDGAR, Sodir (Norwegian Offshore Directorate), and Wikidata as queryable knowledge graphs."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [
@@ -18,6 +18,10 @@ classifiers = [
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
     "Programming Language :: Rust",
     "Topic :: Database",
     "Topic :: Scientific/Engineering",
@@ -34,7 +38,7 @@ dynamic = ["version"]
 # the exact floor as well as the newest release satisfying the range, so the
 # lower bound cannot silently rot.
 dependencies = [
-    "kglite>=0.21.2",
+    "kglite>=0.21.3",
 ]
 
 [project.optional-dependencies]
@@ -49,7 +53,7 @@ arrow = ["pyarrow"]
 # formatter. Divergences from kglite are only the two path settings below
 # (`src` / `known-first-party`), which name this package instead of `kglite`.
 line-length = 120
-target-version = "py310"
+target-version = "py312"
 src = ["kglite_datasets"]
 # ruff 0.16 began formatting Python code blocks embedded in Markdown; our prose
 # examples are hand-wrapped for narrow doc columns. Same scope decision as
