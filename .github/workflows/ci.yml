@@ -87,24 +87,24 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
         python-version: ['3.12', '3.13', '3.14', '3.15']
-        # Both ends of the declared `kglite>=0.21.3` range. Testing only the
+        # Both ends of the declared `kglite>=0.21.4` range. Testing only the
         # latest engine leaves the floor unverified — it would rot silently
         # until a downstream that legitimately resolved an older kglite hit a
-        # break we never saw. `0.21.3` ships wheels for both runners.
-        kglite-spec: ['kglite>=0.21.3', 'kglite==0.21.3']
+        # break we never saw. `0.21.4` ships wheels for both runners.
+        kglite-spec: ['kglite>=0.21.4', 'kglite==0.21.4']
         include:
-          - kglite-spec: 'kglite>=0.21.3'
+          - kglite-spec: 'kglite>=0.21.4'
             kglite-label: latest
-          - kglite-spec: 'kglite==0.21.3'
+          - kglite-spec: 'kglite==0.21.4'
             kglite-label: floor
         exclude:
           # The floor engine is checked on the oldest interpreter only; the
           # interpreter axis is exercised against the newest engine.
-          - kglite-spec: 'kglite==0.21.3'
+          - kglite-spec: 'kglite==0.21.4'
             python-version: '3.13'
-          - kglite-spec: 'kglite==0.21.3'
+          - kglite-spec: 'kglite==0.21.4'
             python-version: '3.14'
-          - kglite-spec: 'kglite==0.21.3'
+          - kglite-spec: 'kglite==0.21.4'
             python-version: '3.15'
     steps:
       - uses: actions/checkout@v7
