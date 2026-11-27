@@ -6,6 +6,17 @@ semantic versioning (workspace version in the root `Cargo.toml`).
 
 ## [Unreleased]
 
+## [0.1.31] - 2026-11-27
+
+### Changed
+
+- The declared kglite floor is `>=0.21.8` (package metadata, CI install pins,
+  dev toolchain, Rust dependency example). The Python suite (60 passed, 13
+  opt-in live suites skipped) and the golden digests are unchanged on kglite
+  0.21.8.
+- Dependencies: wkt 0.15; lockfile refreshed (zip 9.8, ureq 3.5.2, sha2 0.11.2,
+  among others). The `regex` floor is 1.13.1, in step with kglite.
+
 ## [0.1.30] - 2026-10-29
 
 ### Breaking

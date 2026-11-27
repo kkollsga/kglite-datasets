@@ -38,7 +38,7 @@ thiserror = "2"
 csv = "1.4"
 sha2 = "0.11"
 chrono = { version = "0.4.45", features = ["serde"] }
-regex = "1.13"
+regex = "1.13.1"
 rayon = "1.12"
 # ureq 3 default features give rustls TLS + auto gzip. JSON bodies are decoded
 # with serde_json (sodir's fetch_json), so the `json` feature is not enabled.
@@ -49,7 +49,7 @@ zip = { version = "9", optional = true, default-features = false, features = ["d
 quick-xml = { version = "0.42", optional = true }
 geojson = { version = "1", optional = true }
 geo = { version = "0.33", optional = true }
-wkt = { version = "0.14", optional = true, features = ["geo-types"] }
+wkt = { version = "0.15", optional = true, features = ["geo-types"] }
 
 [dev-dependencies]
 # Golden oracle: SHA-256 of the canonical rendering of the loaders' emitted
